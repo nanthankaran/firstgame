@@ -1,0 +1,3180 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>COIMBATORE VI: Realistic Metropolis & Webnox Tech Empire</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Teko:wght@600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                        gta: ['Teko', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020617;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        #game-canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .hud-glass {
+            background: rgba(9, 13, 22, 0.84);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+        }
+        .btn-action {
+            transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.15s ease;
+        }
+        .btn-action:active:not(:disabled) {
+            transform: scale(0.93);
+        }
+        /* Wanted Stars Police Flash */
+        @keyframes policeStrobe {
+            0%, 100% { color: #ef4444; text-shadow: 0 0 12px #ef4444; }
+            50% { color: #3b82f6; text-shadow: 0 0 12px #3b82f6; }
+        }
+        .wanted-active {
+            animation: policeStrobe 0.6s infinite;
+        }
+        /* Blood / Damage Vignette */
+        #damage-vignette {
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+            background: radial-gradient(circle, transparent 50%, rgba(220, 38, 38, 0.65) 100%);
+        }
+        /* Crosshair Reticle */
+        .reticle-line {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.88);
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+            transition: all 0.08s ease;
+        }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(6, 182, 212, 0.5); border-radius: 9999px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-white overflow-hidden select-none">
+
+    <!-- ==================== 3D REALISTIC OPEN-WORLD VIEWPORT ==================== -->
+    <div id="game-canvas-container"></div>
+
+    <!-- Screen Damage Vignette -->
+    <div id="damage-vignette" class="fixed inset-0 z-10 opacity-0"></div>
+
+    <!-- WASTED / BUSTED OVERLAY -->
+    <div id="wasted-overlay" class="fixed inset-0 z-50 hidden flex-col items-center justify-center bg-black/80 backdrop-blur-md">
+        <h1 id="wasted-title" class="font-gta text-8xl sm:text-9xl font-bold tracking-widest text-rose-600 drop-shadow-[0_5px_25px_rgba(225,29,72,0.9)]">WASTED</h1>
+        <p id="wasted-sub" class="text-slate-300 text-sm sm:text-base font-bold tracking-wider uppercase mt-2">Admitted to Coimbatore Medical College Hospital • Medical Bill ₹2,500</p>
+    </div>
+
+    <!-- ==================== CENTER DYNAMIC RETICLE / CROSSHAIR ==================== -->
+    <div id="crosshair" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none w-8 h-8 flex items-center justify-center">
+        <div class="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_#fbbf24]"></div>
+        <div id="ret-top" class="reticle-line w-0.5 h-2.5 -top-1"></div>
+        <div id="ret-bot" class="reticle-line w-0.5 h-2.5 -bottom-1"></div>
+        <div id="ret-left" class="reticle-line h-0.5 w-2.5 -left-1"></div>
+        <div id="ret-right" class="reticle-line h-0.5 w-2.5 -right-1"></div>
+    </div>
+
+    <!-- ==================== TOP-LEFT: RADAR MINIMAP, HEALTH/ARMOR & GPS ==================== -->
+    <div class="fixed top-3 left-3 z-30 flex flex-col gap-2 pointer-events-auto">
+        <div class="flex items-start gap-2.5">
+            <!-- Interactive Radar Minimap -->
+            <div onclick="toggleFullMap()" class="relative w-36 h-28 sm:w-44 sm:h-34 rounded-2xl hud-glass p-1.5 shadow-2xl cursor-pointer group hover:border-cyan-400/70 transition overflow-hidden">
+                <canvas id="minimap-canvas" width="190" height="150" class="w-full h-full rounded-xl bg-slate-950"></canvas>
+                <!-- Health, Armor & Stamina Bars at Bottom of Radar (GTA V / VI Style) -->
+                <div class="absolute bottom-1.5 left-1.5 right-1.5 h-2 bg-slate-950/90 rounded overflow-hidden flex gap-0.5 p-0.5 border border-slate-800">
+                    <div class="flex-1 bg-slate-900 rounded-sm overflow-hidden">
+                        <div id="hud-health-bar" class="h-full bg-emerald-500 transition-all duration-150" style="width: 100%"></div>
+                    </div>
+                    <div class="flex-1 bg-slate-900 rounded-sm overflow-hidden">
+                        <div id="hud-armor-bar" class="h-full bg-sky-400 transition-all duration-150" style="width: 100%"></div>
+                    </div>
+                    <div class="w-1/4 bg-slate-900 rounded-sm overflow-hidden">
+                        <div id="hud-stamina-bar" class="h-full bg-amber-400 transition-all duration-150" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div class="absolute top-2 left-2.5 bg-slate-950/85 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-cyan-400 border border-cyan-500/30">
+                    GPS [M]
+                </div>
+            </div>
+
+            <!-- District Info, Battleground Status & Cheat Notification -->
+            <div class="flex flex-col gap-1.5">
+                <div class="hud-glass px-3 py-2 rounded-2xl shadow-lg">
+                    <div class="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-cyan-400">
+                        <i class="fa-solid fa-location-dot"></i>
+                        <span id="hud-district-name">Webnox Technologies HQ</span>
+                    </div>
+                    <div id="hud-tamil-sub" class="text-[11px] font-bold text-slate-200 mt-0.5">வெப்நாக்ஸ் டெக்னாலஜிஸ் • கிராஸ் கட் ரோடு</div>
+                    <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                        <span id="hud-latlng-badge" class="font-mono text-amber-300 font-bold">11.0186°N, 76.9628°E</span>
+                        <span>•</span>
+                        <span id="hud-time-badge"><i class="fa-solid fa-sun text-amber-400 mr-1"></i>16:45 IST</span>
+                        <span>•</span>
+                        <span id="hud-gps-dist" class="text-emerald-400 font-bold">20m</span>
+                    </div>
+                </div>
+
+                <!-- Active God Mode / Cheat Pills -->
+                <div id="active-cheats-strip" class="flex flex-wrap gap-1 max-w-[210px]"></div>
+            </div>
+        </div>
+
+        <!--GTA Cheat Activated Banner -->
+        <div id="cheat-toast" class="hidden hud-glass border-l-4 border-l-amber-400 px-3.5 py-2 rounded-xl shadow-2xl text-xs font-bold text-white items-center gap-2 max-w-xs">
+            <i class="fa-solid fa-terminal text-amber-400"></i>
+            <div>
+                <div class="text-[9px] uppercase tracking-widest text-amber-400 font-extrabold">CHEAT ACTIVATED</div>
+                <div id="cheat-toast-text" class="text-xs font-bold">HESOYAM: Full Health, Armor & ₹2,50,000!</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== TOP-CENTER: BATTLEGROUND SURVIVAL HUD ==================== -->
+    <div id="battleground-hud" class="fixed top-3 left-1/2 -translate-x-1/2 z-30 hidden flex-col items-center gap-1 pointer-events-auto">
+        <div class="hud-glass border border-rose-500/60 px-4 py-1.5 rounded-2xl shadow-2xl flex items-center gap-4">
+            <div class="flex items-center gap-1.5">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                <span class="font-display font-extrabold text-xs uppercase tracking-wider text-rose-400">KOVAI BATTLEGROUND</span>
+            </div>
+            <div class="h-4 w-px bg-slate-700"></div>
+            <div class="text-xs font-bold">ALIVE: <span id="bg-alive-count" class="text-amber-400 font-extrabold">15</span></div>
+            <div class="h-4 w-px bg-slate-700"></div>
+            <div class="text-xs font-bold">KILLS: <span id="bg-kill-count" class="text-emerald-400 font-extrabold">0</span></div>
+            <div class="h-4 w-px bg-slate-700"></div>
+            <div class="text-[11px] font-mono text-sky-300">ZONE: <span id="bg-zone-radius">380m</span></div>
+        </div>
+    </div>
+
+    <!-- ==================== TOP-RIGHT: WANTED STARS, CASH, WEAPON WHEEL & PHONE ==================== -->
+    <div class="fixed top-3 right-3 z-30 flex flex-col items-end gap-2 pointer-events-auto">
+        <!-- 5-Star Wanted Level Row -->
+        <div class="hud-glass px-3 py-1.5 rounded-2xl flex items-center gap-3 shadow-lg">
+            <div id="wanted-stars-container" class="flex items-center gap-1 text-sm">
+                <i class="fa-solid fa-star text-slate-700"></i>
+                <i class="fa-solid fa-star text-slate-700"></i>
+                <i class="fa-solid fa-star text-slate-700"></i>
+                <i class="fa-solid fa-star text-slate-700"></i>
+                <i class="fa-solid fa-star text-slate-700"></i>
+            </div>
+            <div class="h-4 w-px bg-slate-700"></div>
+            <div class="font-gta text-2xl sm:text-3xl font-bold text-emerald-400 tracking-wide leading-none" id="hud-cash">₹5,00,000</div>
+        </div>
+
+        <!-- Equipped Weapon & Ammo Selector -->
+        <div class="flex items-center gap-1.5">
+            <button onclick="cycleWeapon(-1)" class="btn-action hud-glass w-8 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white">
+                <i class="fa-solid fa-chevron-left text-xs"></i>
+            </button>
+            <div onclick="cycleWeapon(1)" class="hud-glass px-3.5 py-1.5 rounded-xl flex items-center gap-2.5 cursor-pointer border border-amber-500/40 hover:border-amber-400 transition">
+                <i id="hud-weapon-icon" class="fa-solid fa-person-rifle text-amber-400 text-lg"></i>
+                <div class="text-right">
+                    <div id="hud-weapon-name" class="font-display font-extrabold text-xs text-white leading-tight">AK-47 Assault</div>
+                    <div id="hud-weapon-ammo" class="text-[10px] font-mono text-amber-300">30 / ∞ [Q]</div>
+                </div>
+            </div>
+            <button onclick="cycleWeapon(1)" class="btn-action hud-glass w-8 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white">
+                <i class="fa-solid fa-chevron-right text-xs"></i>
+            </button>
+        </div>
+
+        <!-- Action Bar: Webnox HQ [H], Smartphone Cheats [P], Battleground [B], Garage [G], Missions [J], Weather -->
+        <div class="flex flex-wrap justify-end gap-1.5">
+            <button onclick="openModal('webnoxModal')" class="btn-action bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-[0_0_15px_rgba(6,182,212,0.5)] border border-cyan-300">
+                <i class="fa-solid fa-laptop-code"></i>
+                <span>WEBNOX HQ [H]</span>
+            </button>
+            <button onclick="toggleSmartphone()" class="btn-action bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-lg border border-amber-200">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+                <span>CHEAT PHONE [P]</span>
+            </button>
+            <button onclick="toggleBattlegroundMode()" id="btn-bg-mode" class="btn-action hud-glass hover:bg-rose-950/80 px-3 py-1.5 rounded-xl text-xs font-extrabold text-rose-400 border border-rose-500/40 flex items-center gap-1.5 shadow-lg">
+                <i class="fa-solid fa-parachute-box"></i>
+                <span>BATTLEGROUND [B]</span>
+            </button>
+            <button onclick="openModal('garageModal')" class="btn-action hud-glass hover:bg-slate-800 px-2.5 py-1.5 rounded-xl text-xs font-bold text-cyan-300 border border-cyan-500/40 flex items-center gap-1">
+                <i class="fa-solid fa-car-burst"></i>
+                <span class="hidden sm:inline">Vehicles [G]</span>
+            </button>
+            <button onclick="openModal('missionsModal')" class="btn-action hud-glass hover:bg-slate-800 px-2.5 py-1.5 rounded-xl text-xs font-bold text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                <i class="fa-solid fa-briefcase"></i>
+                <span class="hidden sm:inline">Missions [J]</span>
+            </button>
+            <button onclick="cycleTimeAndWeather()" class="btn-action hud-glass hover:bg-slate-800 p-1.5 px-2.5 rounded-xl text-xs text-amber-300" title="Cycle Time & Monsoon Rain">
+                <i class="fa-solid fa-cloud-moon-rain"></i>
+            </button>
+        </div>
+
+        <!-- Proximity Interactive Prompt (When near Webnox Technologies Venky Complex) -->
+        <div id="hq-proximity-prompt" class="hidden hud-glass border-2 border-cyan-400 px-3.5 py-2 rounded-2xl shadow-2xl items-center gap-2.5 animate-bounce">
+            <div class="w-8 h-8 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-300 font-bold">
+                <i class="fa-solid fa-building-user"></i>
+            </div>
+            <div class="text-left">
+                <div class="text-[10px] font-extrabold uppercase text-cyan-400">VENKY COMPLEX • 2ND FLOOR</div>
+                <div class="text-xs font-bold text-white">Press <span class="text-amber-400">[H]</span> to Enter Webnox Technologies HQ</div>
+            </div>
+        </div>
+
+        <!-- Digital Speedometer (Visible when Driving Vehicle / Tank) -->
+        <div id="vehicle-hud" class="hidden hud-glass rounded-2xl p-3 border border-amber-500/40 shadow-2xl w-52">
+            <div class="flex items-center justify-between">
+                <span id="hud-veh-name" class="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 truncate">Webnox Founder V10</span>
+                <span class="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">TN-38</span>
+            </div>
+            <div class="flex items-baseline justify-between mt-1">
+                <div>
+                    <span id="hud-speed-kmh" class="font-gta text-4xl font-bold text-white leading-none">0</span>
+                    <span class="text-[10px] text-slate-400 font-bold ml-1">KM/H</span>
+                </div>
+                <div class="text-[10px] text-amber-300 font-bold">[SPACE] Drift/Brake</div>
+            </div>
+            <div class="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mt-1.5">
+                <div id="hud-rpm-bar" class="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 transition-all duration-75" style="width: 10%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SMARTPHONE CHEAT DECK & TERMINAL (KEY [P]) ==================== -->
+    <div id="smartphone-drawer" class="fixed bottom-20 right-4 z-40 hidden w-72 sm:w-80 rounded-[28px] bg-slate-950 border-4 border-slate-700 shadow-[0_15px_50px_rgba(0,0,0,0.9)] overflow-hidden flex-col pointer-events-auto">
+        <!-- Phone Status Bar -->
+        <div class="bg-slate-900 px-4 py-2 flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800">
+            <span class="font-bold text-cyan-400">JioTrue5G • CBE</span>
+            <div class="w-12 h-2 bg-black rounded-full"></div>
+            <div class="flex items-center gap-1.5">
+                <i class="fa-solid fa-wifi"></i>
+                <i class="fa-solid fa-battery-full text-emerald-400"></i>
+            </div>
+        </div>
+
+        <!-- Phone Header -->
+        <div class="p-3 bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-600/20 border-b border-slate-800 flex items-center justify-between">
+            <div>
+                <h3 class="font-display font-black text-sm text-white">KOVAI OS • GTA CHEAT DECK</h3>
+                <p class="text-[10px] text-slate-400">Type on Keyboard anytime OR tap below:</p>
+            </div>
+            <button onclick="toggleSmartphone()" class="w-7 h-7 rounded-full bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <!-- Direct Cheat Code Input Box -->
+        <div class="p-2.5 bg-slate-900/90 border-b border-slate-800 flex gap-1.5">
+            <input id="cheat-input-box" type="text" placeholder="Type WEBNOXKING, PANZER..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-mono uppercase text-amber-300 focus:outline-none focus:border-amber-400">
+            <button onclick="submitCheatBox()" class="btn-action bg-amber-500 text-slate-950 font-extrabold text-xs px-3 rounded-xl">RUN</button>
+        </div>
+
+        <!-- One-Tap GTA Cheat Codes List -->
+        <div class="p-2.5 max-h-72 overflow-y-auto space-y-1.5 text-xs">
+            <button onclick="activateCheat('WEBNOXKING')" class="w-full btn-action bg-gradient-to-r from-cyan-950 to-blue-950 hover:from-cyan-900 hover:to-blue-900 border border-cyan-400/60 p-2.5 rounded-xl flex items-center justify-between text-left mb-1">
+                <div>
+                    <div class="font-mono font-extrabold text-xs text-cyan-300">WEBNOXKING</div>
+                    <div class="text-[10px] text-slate-200">+₹10 Crore Cash + Webnox Founder V10 Supercar!</div>
+                </div>
+                <i class="fa-solid fa-crown text-amber-400 text-lg"></i>
+            </button>
+
+            <div class="grid grid-cols-2 gap-1.5 text-left">
+                <button onclick="activateCheat('HESOYAM')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-emerald-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-emerald-400">HESOYAM</div>
+                    <div class="text-[10px] text-slate-300">Health, Armor & +₹2.5L</div>
+                </button>
+                <button onclick="activateCheat('BAGUVIX')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-amber-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-amber-400">BAGUVIX</div>
+                    <div class="text-[10px] text-slate-300">God Mode Invincibility</div>
+                </button>
+                <button onclick="activateCheat('UZUMYMW')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-rose-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-rose-400">UZUMYMW</div>
+                    <div class="text-[10px] text-slate-300">All Heavy Weapons + RPG</div>
+                </button>
+                <button onclick="activateCheat('FULLCLIP')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-purple-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-purple-400">FULLCLIP</div>
+                    <div class="text-[10px] text-slate-300">Infinite Ammo No Reload</div>
+                </button>
+                <button onclick="activateCheat('PANZER')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-lime-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-lime-400">PANZER</div>
+                    <div class="text-[10px] text-slate-300">Spawn Rhino Battle Tank</div>
+                </button>
+                <button onclick="activateCheat('ROCKETMAN')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-cyan-400">ROCKETMAN</div>
+                    <div class="text-[10px] text-slate-300">Equip Thruster Jetpack</div>
+                </button>
+                <button onclick="activateCheat('COMET')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-orange-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-orange-400">COMET</div>
+                    <div class="text-[10px] text-slate-300">Spawn Kovai V10 Supercar</div>
+                </button>
+                <button onclick="activateCheat('LAWYERUP')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-sky-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-sky-400">LAWYERUP</div>
+                    <div class="text-[10px] text-slate-300">Clear Wanted Stars (0★)</div>
+                </button>
+                <button onclick="activateCheat('BRINGITON')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-red-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-red-400">BRINGITON</div>
+                    <div class="text-[10px] text-slate-300">5-Star Police Chaos!</div>
+                </button>
+                <button onclick="activateCheat('KANGAROO')" class="btn-action bg-slate-900 hover:bg-slate-800 border border-pink-500/40 p-2 rounded-xl">
+                    <div class="font-mono font-extrabold text-[11px] text-pink-400">KANGAROO</div>
+                    <div class="text-[10px] text-slate-300">Mega Super-Jump</div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== BOTTOM CONTROLS & ACTION BAR ==================== -->
+    <div class="fixed bottom-3 inset-x-3 z-30 flex items-end justify-between pointer-events-none">
+        <!-- Left Touch Joystick (Mobile / Tablet) -->
+        <div id="joystick-zone" class="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full hud-glass border-2 border-slate-600/50 flex items-center justify-center pointer-events-auto touch-none shadow-2xl">
+            <div class="text-[9px] uppercase font-bold text-slate-400/60 pointer-events-none">MOVE / STEER</div>
+            <div id="joystick-knob" class="absolute w-12 h-12 rounded-full bg-gradient-to-b from-amber-400 to-orange-600 shadow-lg border-2 border-amber-200 pointer-events-none"></div>
+        </div>
+
+        <!-- Center Dialogue & Controls Helper Bar -->
+        <div class="flex flex-col items-center gap-2 max-w-xl mx-auto px-2 pointer-events-auto">
+            <!-- Radio / Dialogue Toast -->
+            <div id="dialogue-banner" class="hidden hud-glass border-l-4 border-l-cyan-400 rounded-2xl p-3 shadow-2xl w-full items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 text-lg shrink-0">
+                    <i id="dlg-icon" class="fa-solid fa-walkie-talkie"></i>
+                </div>
+                <div class="flex-1 text-left">
+                    <div id="dlg-speaker" class="text-[10px] font-extrabold uppercase tracking-wider text-cyan-400">Kovai Police Dispatch</div>
+                    <p id="dlg-text" class="text-xs text-slate-100 font-medium">Suspect spotted speeding on Avinashi Road Flyover!</p>
+                </div>
+            </div>
+
+            <!-- PC Keyboard Shortcuts Bar -->
+            <div class="hidden lg:flex items-center gap-3 hud-glass px-4 py-1.5 rounded-full text-[11px] text-slate-300 shadow-lg">
+                <span><strong class="text-amber-400">WASD</strong> Move/Drive</span>
+                <span>•</span>
+                <span><strong class="text-amber-400">L-Click / [E]</strong> Shoot / Attack</span>
+                <span>•</span>
+                <span><strong class="text-amber-400">R-Click</strong> Aim Zoom</span>
+                <span>•</span>
+                <span><strong class="text-amber-400">[F]</strong> Hijack / Enter Vehicle</span>
+                <span>•</span>
+                <span><strong class="text-cyan-400">[H]</strong> Webnox HQ</span>
+                <span>•</span>
+                <span><strong class="text-amber-400">Type</strong> WEBNOXKING / PANZER</span>
+            </div>
+        </div>
+
+        <!-- Right Touch Combat & Vehicle Buttons -->
+        <div class="flex flex-col items-end gap-2 pointer-events-auto">
+            <div class="flex items-center gap-2">
+                <!-- Hijack / Enter / Exit Any Car Button -->
+                <button id="btn-hijack-vehicle" onclick="hijackOrEnterExitVehicle()" class="btn-action px-4 py-3 rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-display font-extrabold text-xs shadow-xl border border-sky-300/50 flex items-center gap-2">
+                    <i class="fa-solid fa-car-side text-sm"></i>
+                    <span id="btn-hijack-label">HIJACK / DRIVE [F]</span>
+                </button>
+                <!-- Horn / Siren -->
+                <button onclick="triggerHornOrSiren()" class="btn-action w-11 h-11 rounded-2xl hud-glass border border-amber-400/50 text-amber-400 flex items-center justify-center shadow-lg">
+                    <i class="fa-solid fa-bullhorn"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <!-- Jetpack / Jump Button -->
+                <button onpointerdown="keys.space=true" onpointerup="keys.space=false" class="btn-action w-12 h-12 rounded-2xl hud-glass border border-cyan-400/40 text-cyan-300 font-bold text-[10px] flex flex-col items-center justify-center shadow-lg">
+                    <i class="fa-solid fa-jet-fighter-up text-sm"></i>
+                    <span>JUMP</span>
+                </button>
+                <!-- Sprint / Nitro -->
+                <button onpointerdown="keys.shift=true" onpointerup="keys.shift=false" class="btn-action w-12 h-12 rounded-2xl hud-glass border border-emerald-400/40 text-emerald-300 font-bold text-[10px] flex flex-col items-center justify-center shadow-lg">
+                    <i class="fa-solid fa-bolt text-sm"></i>
+                    <span>NITRO</span>
+                </button>
+                <!-- BIG FIRE / ATTACK BUTTON -->
+                <button onpointerdown="startFiring()" onpointerup="stopFiring()" onpointerleave="stopFiring()" class="btn-action w-16 h-16 rounded-2xl bg-gradient-to-b from-rose-500 to-red-700 border-2 border-rose-300 text-white font-display font-black text-xs flex flex-col items-center justify-center shadow-[0_0_25px_rgba(225,29,72,0.7)]">
+                    <i class="fa-solid fa-crosshairs text-xl"></i>
+                    <span class="text-[10px] mt-0.5">FIRE</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODALS (FULL GPS MAP, GARAGE, MISSIONS, WEBNOX HQ) ==================== -->
+
+    <!-- 1. INTERACTIVE COIMBATORE SATELLITE GPS MAP -->
+    <div id="mapModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/90 backdrop-blur-md p-3 sm:p-6">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-5xl w-full h-[86vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-map-location-dot text-emerald-400 text-xl"></i>
+                    <div>
+                        <h2 class="font-display font-extrabold text-lg text-white">GOOGLE MAPS VERIFIED • COIMBATORE, TAMIL NADU (11.0168° N, 76.9558° E)</h2>
+                        <p class="text-xs text-slate-400">Real GPS Coordinates, Verified Addresses, Ratings & Fast-Travel across Kovai</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="setMapStyle('street')" id="btn-map-street" class="px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs">Google Street View</button>
+                    <button onclick="setMapStyle('satellite')" id="btn-map-sat" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs">Satellite Hybrid</button>
+                    <button onclick="closeModal('mapModal')" class="w-9 h-9 rounded-xl bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                <div class="relative flex-1 bg-slate-950 overflow-hidden flex items-center justify-center">
+                    <canvas id="fullmap-canvas" width="760" height="580" class="w-full h-full cursor-crosshair"></canvas>
+                    <div class="absolute bottom-3 left-3 bg-slate-950/90 border border-slate-700 px-3 py-1.5 rounded-xl text-[11px] font-mono text-emerald-400">
+                        LIVE TELEMETRY: <span id="fullmap-live-coords">11.0186° N, 76.9628° E • Pincode 641012</span>
+                    </div>
+                </div>
+                <div class="w-full lg:w-96 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 p-4 overflow-y-auto space-y-2">
+                    <div class="text-xs font-extrabold uppercase tracking-wider text-cyan-400 mb-2">Google Maps Verified Places (16)</div>
+                    <div id="landmark-directory-list" class="space-y-2.5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. VEHICLE & TANK SPAWNER GARAGE MODAL -->
+    <div id="garageModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+        <div class="bg-slate-900 border border-cyan-500/40 rounded-3xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                    <h2 class="font-display font-extrabold text-xl text-white">KOVAI EXOTIC CUSTOMS & ARMORY GARAGE</h2>
+                    <p class="text-xs text-slate-400">Deliver any Supercar, Royal Bullet, TNSTC Bus, Police SUV, or Rhino Battle Tank to your location</p>
+                </div>
+                <button onclick="closeModal('garageModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div id="garage-vehicles-grid" class="flex-1 overflow-y-auto p-4 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+        </div>
+    </div>
+
+    <!-- 3. MISSIONS MODAL -->
+    <div id="missionsModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+        <div class="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                    <h2 class="font-display font-extrabold text-xl text-white">KOVAI IT EMPIRE & STREET CONTRACTS</h2>
+                    <p class="text-xs text-slate-400">High-stakes missions across Cross Cut Road, TIDEL Park, Saravanampatti & Avinashi Road</p>
+                </div>
+                <button onclick="closeModal('missionsModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div id="missions-list-container" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+        </div>
+    </div>
+
+    <!-- 4. WEBNOX TECHNOLOGIES HQ CEO DASHBOARD (VENKY COMPLEX, 2ND FLOOR, CROSS CUT ROAD) -->
+    <div id="webnoxModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/90 backdrop-blur-md p-3 sm:p-6">
+        <div class="bg-slate-900 border-2 border-cyan-500/50 rounded-3xl max-w-3xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.3)]">
+            <div class="px-5 py-4 bg-gradient-to-r from-slate-950 via-cyan-950/60 to-slate-950 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-400 flex items-center justify-center text-cyan-300 text-2xl font-extrabold">
+                        W
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="font-display font-extrabold text-xl text-white">WEBNOX TECHNOLOGIES — HQ</h2>
+                            <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-extrabold px-2 py-0.5 rounded-full">CEO SUITE</span>
+                        </div>
+                        <p class="text-[11px] text-cyan-200/80">No. 721/2, Venky Complex, 2nd Floor, Cross Cut Road, Seth Narang Das Layout, Coimbatore - 641012</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('webnoxModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="p-4 sm:p-5 overflow-y-auto space-y-4">
+                <!-- Company Stats Banner -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5">
+                        <div class="text-[10px] font-bold uppercase text-slate-400">Passive IT Revenue</div>
+                        <div id="webnox-income-rate" class="font-gta font-bold text-3xl text-emerald-400 mt-0.5">+₹15,000 / sec</div>
+                        <div class="text-[10px] text-slate-500">Auto-deposited into your Kovai Cash</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5">
+                        <div class="text-[10px] font-bold uppercase text-slate-400">Coimbatore Dev Team</div>
+                        <div id="webnox-team-count" class="font-gta font-bold text-3xl text-cyan-400 mt-0.5">25 Engineers</div>
+                        <div class="text-[10px] text-slate-500">Full-Stack, AI, Cloud & Digital Marketing</div>
+                    </div>
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between">
+                        <div class="text-[10px] font-bold uppercase text-amber-400">Executive Action</div>
+                        <button onclick="teleportToWebnoxHQ()" class="btn-action mt-1 w-full py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-extrabold text-xs">
+                            <i class="fa-solid fa-location-crosshairs mr-1"></i> Teleport to Venky Complex HQ
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expand Divisions -->
+                <div>
+                    <h3 class="font-display font-extrabold text-sm uppercase tracking-wider text-slate-300 mb-2">Expand Webnox Divisions & Global Client Contracts</h3>
+                    <div id="webnox-divisions-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MAIN GAME ENGINE SCRIPT ==================== -->
+    <script>
+        /***********************************************************************
+         * 1. GOOGLE MAPS VERIFIED COIMBATORE LANDMARKS, LAT/LNG & ADDRESSES
+         ***********************************************************************/
+        // Origin Reference: Gandhipuram Central Bus Stand (11.0183° N, 76.9674° E) => (x:0, z:0)
+        // North = -Z, South = +Z, East = +X, West = -X
+        const KOVAI_LANDMARKS = [
+            {
+                id: 'webnox',
+                name: 'Webnox Technologies',
+                tamil: 'வெப்நாக்ஸ் டெக்னாலஜிஸ் • கிராஸ் கட் ரோடு',
+                lat: 11.0186, lng: 76.9628,
+                x: -38, z: -48,
+                color: '#06b6d4', icon: 'fa-laptop-code',
+                rating: '4.8 ★ (451)',
+                phone: '097865 57739',
+                pincode: '641012',
+                address: 'Second Floor, Venky Complex, No.721/2, Cross Cut Rd, Seth Narang Das Layout, Coimbatore, TN 641012',
+                sub: 'Web Development, AI SaaS, E-Commerce & Digital Marketing HQ'
+            },
+            {
+                id: 'gandhipuram',
+                name: 'Gandhipuram Central Bus Stand',
+                tamil: 'காந்திபுரம் மத்திய பேருந்து நிலையம்',
+                lat: 11.0183, lng: 76.9674,
+                x: 0, z: 0,
+                color: '#f59e0b', icon: 'fa-bus',
+                rating: '3.9 ★ (3.0K)',
+                phone: '0422 243 2939',
+                pincode: '641018',
+                address: '2X78+QQR, Sathyamurthy Rd, Ram Nagar, Coimbatore, Tamil Nadu 641018',
+                sub: 'TNSTC Town & Moffusil Bus Terminus, Nanjappa Rd & 100 Feet Road Junction'
+            },
+            {
+                id: 'crosscut',
+                name: 'Cross Cut Road Shopping District',
+                tamil: 'கிராஸ் கட் ரோடு • காந்திபுரம்',
+                lat: 11.0195, lng: 76.9615,
+                x: -45, z: -85,
+                color: '#ec4899', icon: 'fa-bag-shopping',
+                rating: '4.5 ★ (12.4K)',
+                phone: '0422 249 5555',
+                pincode: '641012',
+                address: 'Cross Cut Rd, Ram Nagar / Seth Narang Das Layout, Coimbatore, Tamil Nadu 641012',
+                sub: 'Shree Devi Textiles, The Chennai Silks, Pothys & Gold Jewelry Showrooms'
+            },
+            {
+                id: 'brookefields',
+                name: 'Brookefields Mall',
+                tamil: 'புரூக்பீல்ட்ஸ் மால்',
+                lat: 11.0089, lng: 76.9592,
+                x: -95, z: -20,
+                color: '#a855f7', icon: 'fa-film',
+                rating: '4.4 ★ (88.8K)',
+                phone: '098941 54545',
+                pincode: '641001',
+                address: '67-71, Dr Krishnasamy Mudaliyar Rd, Sukrawar Pettai, Ram Nagar, Coimbatore 641001',
+                sub: 'PLR PVR Multiplex Cinema, Food Court & Flagship Retail'
+            },
+            {
+                id: 'rspuram',
+                name: 'Sree Annapoorna R.S. Puram & D.B. Road',
+                tamil: 'அண்ணபூர்னா ஆர். எஸ். புரம்',
+                lat: 11.0086, lng: 76.9510,
+                x: -175, z: 30,
+                color: '#10b981', icon: 'fa-mug-hot',
+                rating: '4.2 ★ (15.7K)',
+                phone: '0422 452 2333',
+                pincode: '641002',
+                address: '75, E Arokiasamy Rd & Diwan Bahadur Rd, R.S. Puram, Coimbatore, TN 641002',
+                sub: 'Iconic Kovai Filter Coffee, Sambar Idli & R.S. Puram Clock Tower'
+            },
+            {
+                id: 'vocpark',
+                name: 'V.O.C. Park and Stadium',
+                tamil: 'வ.உ.சி. பூங்கா மற்றும் விளையாட்டு மைதானம்',
+                lat: 11.0054, lng: 76.9708,
+                x: 32, z: 75,
+                color: '#84cc16', icon: 'fa-futbol',
+                rating: '3.7 ★ (14.7K)',
+                phone: '0422 230 2323',
+                pincode: '641018',
+                address: '24, Park Gate Rd, ATT Colony, Gopalapuram, Coimbatore, Tamil Nadu 641018',
+                sub: 'Recreational Park, Nehru Stadium & Avinashi Road Underpass'
+            },
+            {
+                id: 'racecourse',
+                name: 'Race Course Walking Boulevard',
+                tamil: 'ரேஸ் கோர்ஸ் நடைபாதை',
+                lat: 11.0011, lng: 76.9765,
+                x: 85, z: 125,
+                color: '#4ade80', icon: 'fa-tree',
+                rating: '4.7 ★ (19.2K)',
+                phone: '0422 222 0100',
+                pincode: '641018',
+                address: 'Race Course Rd, Gopalapuram, Coimbatore, Tamil Nadu 641018',
+                sub: 'Smart City 2.5km Canopy Walkway, Thomas Park & Colonial Cafes'
+            },
+            {
+                id: 'railway',
+                name: 'Coimbatore Junction Railway Station (CBE)',
+                tamil: 'கோயம்புத்தூர் சந்திப்பு ரயில் நிலையம்',
+                lat: 10.9997, lng: 76.9667,
+                x: -25, z: 135,
+                color: '#ef4444', icon: 'fa-train',
+                rating: '4.2 ★ (14.6K)',
+                phone: '139',
+                pincode: '641018',
+                address: 'State Bank Rd, Gopalapuram, Coimbatore, Tamil Nadu 641018',
+                sub: 'Southern Railway Main Junction, Nilgiri Express & Vande Bharat Hub'
+            },
+            {
+                id: 'townhall',
+                name: 'Victoria Town Hall & Oppanakara Street',
+                tamil: 'விக்டோரியா டவுன் ஹால் / ஒப்பணக்கார வீதி',
+                lat: 10.9935, lng: 76.9612,
+                x: -35, z: 185,
+                color: '#d97706', icon: 'fa-clock',
+                rating: '4.8 ★ (39)',
+                phone: '0422 239 0261',
+                pincode: '641001',
+                address: 'XXV6+9C2, Big Bazaar St, Town Hall, Coimbatore, Tamil Nadu 641001',
+                sub: '1892 Stone Heritage Building, Raja Street & Textile Markets'
+            },
+            {
+                id: 'ukkadam',
+                name: 'Ukkadam-Valankulam Lake & Flyover',
+                tamil: 'உக்கடம் - வாலாங்குளம் ஏரி மேம்பாலம்',
+                lat: 10.9885, lng: 76.9635,
+                x: -55, z: 265,
+                color: '#0ea5e9', icon: 'fa-water',
+                rating: '4.4 ★ (335)',
+                phone: '0422 239 0261',
+                pincode: '641001',
+                address: 'Highways Colony, Trichy Rd / Sungam Bypass, Ukkadam, Coimbatore 641001',
+                sub: 'Smart City Lakefront Promenade, "I ♥ KOVAI" Selfie Point & Elevated Highway'
+            },
+            {
+                id: 'peelamedu',
+                name: 'PSG College of Technology (Peelamedu)',
+                tamil: 'பி.எஸ்.ஜி தொழில்நுட்பக் கல்லூரி • பீளமேடு',
+                lat: 11.0247, lng: 77.0028,
+                x: 150, z: 45,
+                color: '#f97316', icon: 'fa-graduation-cap',
+                rating: '4.5 ★ (3.9K)',
+                phone: '0422 257 2177',
+                pincode: '641004',
+                address: 'Post Box No 1611, Avinashi Rd, Peelamedu, Coimbatore, Tamil Nadu 641004',
+                sub: 'Iconic Avinashi Rd Pedestrian Skywalk Bridge, PSG Tech & Fun Republic Mall'
+            },
+            {
+                id: 'tidelpark',
+                name: 'TIDEL Park Coimbatore Ltd (ELCOT SEZ)',
+                tamil: 'டைடல் பார்க் கோவை • விளாங்குறிச்சி',
+                lat: 11.0283, lng: 77.0268,
+                x: 245, z: 25,
+                color: '#22d3ee', icon: 'fa-microchip',
+                rating: '4.2 ★ (4.0K)',
+                phone: '0422 297 1112',
+                pincode: '641014',
+                address: 'First Floor, ELCOT-SEZ, IT/ITES, 101/A, Villankurichi Rd, B.R. Puram Industrial Estate, Aerodrome Post, CBE 641014',
+                sub: 'Coimbatore Premier IT SEZ housing TCS, Wipro, HCL, Payoda & AppViewX'
+            },
+            {
+                id: 'airport',
+                name: 'Coimbatore International Airport (CJB)',
+                tamil: 'கோயம்புத்தூர் சர்வதேச விமான நிலையம்',
+                lat: 11.0300, lng: 77.0434,
+                x: 345, z: 45,
+                color: '#818cf8', icon: 'fa-plane-departure',
+                rating: '4.1 ★ (7.5K)',
+                phone: '0422 259 2155',
+                pincode: '641014',
+                address: 'Airport Road, Peelamedu - Pudur Main Rd, Civil Aerodrome Post, Coimbatore 641014',
+                sub: 'AAI International Terminal, ATC Tower, Runway 05/23 & KMCH Medical Center'
+            },
+            {
+                id: 'prozone',
+                name: 'PROZONE MALL (Sathy Road)',
+                tamil: 'புரோசோன் மால் • சத்தி ரோடு',
+                lat: 11.0548, lng: 76.9942,
+                x: 65, z: -145,
+                color: '#f43f5e', icon: 'fa-cart-shopping',
+                rating: '4.3 ★ (48.7K)',
+                phone: '087785 11167',
+                pincode: '641035',
+                address: 'SF 201, Sivanandapuram, Sathy Rd (NH-948), Coimbatore, Tamil Nadu 641035',
+                sub: '5-Lakh Sq.Ft Mega Mall, INOX Cinemas & Open-Air Amphitheatre'
+            },
+            {
+                id: 'saravanampatti',
+                name: 'KGISL Campus & CHIL SEZ IT Park',
+                tamil: 'சரவணம்பட்டி கே.ஜி.ஐ.எஸ்.எல் & சில் ஐடி பார்க்',
+                lat: 11.0805, lng: 76.9888,
+                x: 95, z: -230,
+                color: '#38bdf8', icon: 'fa-server',
+                rating: '4.4 ★ (5.2K)',
+                phone: '0422 441 9999',
+                pincode: '641035',
+                address: 'KG Campus, 365, Thudiyalur Rd & CHIL SEZ Rd, Saravanampatti, Coimbatore 641035',
+                sub: 'Cognizant (CTS), Robert Bosch (RBEI), India Land Tech Park & KGisl IT Hub'
+            },
+            {
+                id: 'saibaba',
+                name: 'Saibaba Colony & Mettupalayam Road',
+                tamil: 'சாய்பாபா காலனி • மேட்டுப்பாளையம் ரோடு',
+                lat: 11.0282, lng: 76.9438,
+                x: -155, z: -150,
+                color: '#c084fc', icon: 'fa-gopuram',
+                rating: '4.6 ★ (8.1K)',
+                phone: '0422 244 1212',
+                pincode: '641011',
+                address: 'NSR Rd & Mettupalayam Rd (NH-181), Saibaba Colony, Coimbatore 641011',
+                sub: 'Sri Naga Sai Mandir, Bharathi Park & North-West Residential Hub'
+            },
+            {
+                id: 'marudhamalai',
+                name: 'Arulmigu Subramaniaswamy Temple Marudhamalai',
+                tamil: 'அருள்மிகு சுப்பிரமணியசுவாமி திருக்கோயில், மருதமலை',
+                lat: 11.0468, lng: 76.8518,
+                x: -350, z: -250,
+                color: '#fbbf24', icon: 'fa-mountain-sun',
+                rating: '4.7 ★ (39.5K)',
+                phone: '0422 242 2490',
+                pincode: '641046',
+                address: 'Maruthamalai Sri Subrahmanya Swamy Temple Rd, Marudhamalai Adivaram, Coimbatore 641046',
+                sub: '7th Abode of Lord Murugan atop Western Ghats Hillock with Golden Gopuram'
+            }
+        ];
+
+        // Convert Game (x, z) into Authentic Coimbatore GPS Latitude / Longitude
+        function worldToLatLng(wx, wz) {
+            const lat = 11.0183 - (wz / 3200);
+            const lng = 76.9674 + (wx / 3200);
+            return { lat: lat.toFixed(4), lng: lng.toFixed(4) };
+        }
+
+        // Weapons Arsenal (GTA 6 Weapon Wheel)
+        const WEAPONS_ARSENAL = [
+            { id: 'fist', name: 'Kovai MMA Melee', icon: 'fa-hand-fist', damage: 35, fireRate: 0.4, range: 4.0, pellets: 1, spread: 0.05, ammo: '∞', isRocket: false },
+            { id: 'pistol', name: '9mm Tactical Pistol', icon: 'fa-gun', damage: 34, fireRate: 0.24, range: 95, pellets: 1, spread: 0.02, ammo: 120, isRocket: false },
+            { id: 'smg', name: 'Micro Scorpion SMG', icon: 'fa-bolt', damage: 22, fireRate: 0.09, range: 80, pellets: 1, spread: 0.055, ammo: 320, isRocket: false },
+            { id: 'ak47', name: 'AK-47 Kalashnikov', icon: 'fa-person-rifle', damage: 42, fireRate: 0.12, range: 135, pellets: 1, spread: 0.03, ammo: 300, isRocket: false },
+            { id: 'shotgun', name: 'SPAS-12 Combat Shotgun', icon: 'fa-burst', damage: 24, fireRate: 0.65, range: 48, pellets: 7, spread: 0.12, ammo: 80, isRocket: false },
+            { id: 'rpg', name: 'RPG-7 Rocket Launcher', icon: 'fa-rocket', damage: 350, fireRate: 1.35, range: 180, pellets: 1, spread: 0.01, ammo: 20, isRocket: true }
+        ];
+
+        // Realistic Vehicle Catalog
+        const VEHICLE_CATALOG = [
+            { id: 'gtr', name: 'Webnox Founder V10 Supercar', category: 'EXOTIC HYPERCAR', color: 0x06b6d4, maxSpeed: 88, accel: 52, turn: 2.5, desc: 'Custom Cyan Carbon-Fiber V10 parked outside Venky Complex, Cross Cut Rd.' },
+            { id: 'bullet', name: 'Royal Classic 350 Chrome', category: 'HERITAGE MOTORCYCLE', color: 0xd97706, maxSpeed: 66, accel: 44, turn: 3.1, desc: 'Iconic Coimbatore thumper motorcycle with heavy chrome exhaust.' },
+            { id: 'thar', name: 'Kovai 4x4 Off-Road SUV', category: 'TACTICAL SUV', color: 0x111827, maxSpeed: 68, accel: 40, turn: 2.3, desc: 'High-clearance black 4x4 built for Marudhamalai hills & Avinashi flyover.' },
+            { id: 'bus', name: 'TNSTC Route 70 City Bus', category: 'PUBLIC TRANSIT', color: 0xb91c1c, maxSpeed: 50, accel: 26, turn: 1.75, desc: 'Gandhipuram to Marudhamalai Tamil Nadu State Transport Corporation bus.' },
+            { id: 'auto', name: 'TN-38 Meter Auto-Rickshaw', category: 'CITY THREE-WHEELER', color: 0xfacc15, maxSpeed: 48, accel: 34, turn: 3.5, desc: 'Nimble yellow & black Coimbatore auto-rickshaw for tight bazaar streets.' },
+            { id: 'police', name: 'TN-38 Police Interceptor SUV', category: 'LAW ENFORCEMENT', color: 0xf8fafc, maxSpeed: 76, accel: 46, turn: 2.5, desc: 'Coimbatore City Police patrol SUV with strobe lightbar & siren.' },
+            { id: 'tank', name: 'Rhino M1A2 Heavy Battle Tank', category: 'ARMORED WARFARE', color: 0x4d7c0f, maxSpeed: 42, accel: 28, turn: 1.6, desc: 'Armored battle tank with a 120mm explosive main cannon ([L-Click] to fire).' }
+        ];
+
+        // Webnox Technologies Divisions (Venky Complex, 2nd Floor, Cross Cut Road)
+        const WEBNOX_DIVISIONS = [
+            { id: 'div_web', name: 'Enterprise Web & E-Commerce Wing', desc: 'Custom Magento, Shopify Plus & React Enterprise Platforms for global brands.', baseCost: 100000, incomeBoost: 8500, headcount: 12, level: 1 },
+            { id: 'div_ai', name: 'AI, Cloud SaaS & FinTech Lab', desc: 'Next-gen LLM Automation, SaaS Architecture & Cloud Microservices.', baseCost: 250000, incomeBoost: 22000, headcount: 18, level: 1 },
+            { id: 'div_seo', name: 'Global SEO & Performance Marketing', desc: 'High-conversion Google Ads, Growth Hacking & Brand Authority across 30+ countries.', baseCost: 180000, incomeBoost: 14500, headcount: 10, level: 1 },
+            { id: 'div_app', name: 'iOS / Android Super-App Studio', desc: 'Cross-platform Flutter & Native Mobile Apps built in Coimbatore.', baseCost: 350000, incomeBoost: 32000, headcount: 20, level: 0 }
+        ];
+
+        // Coimbatore Story & Street Contracts
+        const KOVAI_MISSIONS = [
+            { id: 'm_webnox_tidel', title: 'Webnox Cloud Deployment to TIDEL Park', desc: 'Drive from Webnox Technologies HQ (Cross Cut Rd) along Avinashi Road to TIDEL Park SEZ.', x: 245, z: 25, reward: 250000 },
+            { id: 'm_kgisl', title: 'Saravanampatti IT Summit', desc: 'Race north up Sathy Road past Prozone Mall to KGISL & CHIL SEZ IT Park.', x: 95, z: -230, reward: 300000 },
+            { id: 'm_airport', title: 'VIP Client Pickup at Coimbatore Airport', desc: 'Reach Coimbatore International Airport (CJB) terminal in Peelamedu.', x: 345, z: 45, reward: 350000 },
+            { id: 'm_marudhamalai', title: 'Marudhamalai Hilltop Climb', desc: 'Conquer the Western Ghats slope to Arulmigu Subramaniaswamy Temple.', x: -350, z: -250, reward: 400000 },
+            { id: 'm_ukkadam', title: 'Ukkadam Lakefront Smart City Tour', desc: 'Cruise south past Town Hall to the Ukkadam-Valankulam Lakefront Promenade.', x: -55, z: 265, reward: 200000 }
+        ];
+
+        /***********************************************************************
+         * 2. SYNTHESIZED WEB AUDIO SOUND ENGINE (GUNS, EXPLOSIONS, SIRENS)
+         ***********************************************************************/
+        class GTAAudioEngine {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+            }
+            playGunshot(type = 'ak47') {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const bufferSize = this.ctx.sampleRate * 0.14;
+                    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.035));
+                    }
+                    const noise = this.ctx.createBufferSource();
+                    noise.buffer = buffer;
+
+                    const filter = this.ctx.createBiquadFilter();
+                    filter.type = 'lowpass';
+                    filter.frequency.setValueAtTime(type === 'shotgun' ? 900 : 1800, now);
+
+                    const gain = this.ctx.createGain();
+                    gain.gain.setValueAtTime(0.32, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.13);
+
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    noise.start(now);
+                } catch (e) {}
+            }
+            playExplosion() {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const bufferSize = this.ctx.sampleRate * 0.8;
+                    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.22));
+                    }
+                    const noise = this.ctx.createBufferSource();
+                    noise.buffer = buffer;
+                    const filter = this.ctx.createBiquadFilter();
+                    filter.type = 'lowpass';
+                    filter.frequency.setValueAtTime(380, now);
+                    const gain = this.ctx.createGain();
+                    gain.gain.setValueAtTime(0.6, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.78);
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    noise.start(now);
+                } catch (e) {}
+            }
+            playCheatBeep() {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    [587.33, 880, 1174.66].forEach((f, idx) => {
+                        setTimeout(() => {
+                            const osc = this.ctx.createOscillator();
+                            const g = this.ctx.createGain();
+                            osc.type = 'triangle';
+                            osc.frequency.value = f;
+                            g.gain.setValueAtTime(0.14, this.ctx.currentTime);
+                            g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.14);
+                            osc.connect(g);
+                            g.connect(this.ctx.destination);
+                            osc.start();
+                            osc.stop(this.ctx.currentTime + 0.14);
+                        }, idx * 65);
+                    });
+                } catch (e) {}
+            }
+            playSirenBlip() {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const g = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(650, now);
+                    osc.frequency.linearRampToValueAtTime(980, now + 0.18);
+                    g.gain.setValueAtTime(0.1, now);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+                    osc.connect(g);
+                    g.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.22);
+                } catch (e) {}
+            }
+        }
+        const sfx = new GTAAudioEngine();
+
+        /***********************************************************************
+         * 3. GLOBAL GAME STATE, PLAYER & CHEAT FLAGS
+         ***********************************************************************/
+        const state = {
+            cash: 500000,
+            passiveIncomePerSec: 15000,
+            health: 100,
+            maxHealth: 100,
+            armor: 100,
+            stamina: 100,
+            wantedStars: 0,
+            wantedDecayTimer: 0,
+            weaponIdx: 3, // Start with AK-47 equipped
+            isAiming: false,
+            isFiring: false,
+            lastFireTime: 0,
+            godMode: false,
+            infiniteAmmo: false,
+            superJump: false,
+            jetpackEquipped: false,
+            slowMo: false,
+            battlegroundActive: false,
+            bgZoneRadius: 380,
+            bgKills: 0,
+            timePreset: 0, // 0: Golden Afternoon, 1: Neon Night, 2: Monsoon Storm
+            gpsTarget: { x: -38, z: -48, name: 'Webnox Technologies HQ' },
+            activeMission: null,
+            isWasted: false
+        };
+
+        const keys = { w: false, s: false, a: false, d: false, shift: false, space: false };
+        const joyInput = { x: 0, y: 0 };
+        let typedCheatBuffer = '';
+
+        // Three.js Scene Objects
+        let scene, camera, renderer, sunLight, ambientLight, hemiLight, muzzleLight;
+        let playerHuman = null;
+        let jetpackMesh = null;
+        let empZoneCylinder = null;
+        let webnoxMarkerRing = null;
+
+        // Spawn Player right outside Webnox Technologies (Venky Complex, Cross Cut Road, Seth Narang Das Layout)
+        const player = {
+            pos: new THREE.Vector3(-38, 0, -28),
+            velY: 0,
+            rotY: Math.PI, // Facing Webnox Technologies Venky Complex
+            pitch: 0.12,
+            speed: 0,
+            inVehicle: null,
+            isGrounded: true
+        };
+
+        const allVehicles = [];
+        const allHumans = [];     // Civilians, Police Officers, Battleground Mercenaries
+        const activeRockets = [];
+        const explosionParticles = [];
+        const bulletTracers = [];
+        const buildingColliders = [];
+        const supplyCrates = [];
+
+        /***********************************************************************
+         * 4. PROCEDURAL PBR TEXTURE GENERATORS (ASPHALT, GLASS, TAMIL SIGNS)
+         ***********************************************************************/
+        function createAsphaltTexture() {
+            const c = document.createElement('canvas');
+            c.width = 512; c.height = 512;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#1e2430';
+            ctx.fillRect(0, 0, 512, 512);
+            for (let i = 0; i < 18000; i++) {
+                const v = 22 + Math.floor(Math.random() * 26);
+                ctx.fillStyle = `rgb(${v},${v + 2},${v + 6})`;
+                ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+            }
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(248, 0, 5, 512);
+            ctx.fillRect(259, 0, 5, 512);
+            ctx.fillStyle = '#e2e8f0';
+            for (let y = 0; y < 512; y += 64) {
+                ctx.fillRect(124, y, 4, 34);
+                ctx.fillRect(384, y, 4, 34);
+            }
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            return tex;
+        }
+
+        function createHighwayGantryTexture(routeCode, tamilDest, engDest, distText) {
+            const c = document.createElement('canvas');
+            c.width = 512; c.height = 160;
+            const ctx = c.getContext('2d');
+            // Authentic NHAI Indian Highway Green Board
+            ctx.fillStyle = '#065f46';
+            ctx.fillRect(0, 0, 512, 160);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 6;
+            ctx.strokeRect(6, 6, 500, 148);
+
+            // NH Shield Box
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(18, 22, 92, 54);
+            ctx.fillStyle = '#090d16';
+            ctx.font = '900 24px Outfit, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(routeCode, 64, 58);
+
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 28px sans-serif';
+            ctx.fillText(tamilDest, 126, 55);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '800 28px Plus Jakarta Sans, sans-serif';
+            ctx.fillText(engDest, 126, 98);
+
+            ctx.fillStyle = '#a7f3d0';
+            ctx.font = 'bold 22px monospace';
+            ctx.fillText(distText, 126, 134);
+            return new THREE.CanvasTexture(c);
+        }
+
+        function createCoconutPalmTree() {
+            const palm = new THREE.Group();
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+            const leafMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.65, side: THREE.DoubleSide });
+
+            // Curved segmented trunk
+            for (let i = 0; i < 6; i++) {
+                const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.22 - i * 0.02, 0.25 - i * 0.02, 1.35, 7), trunkMat);
+                seg.position.set(i * 0.08, i * 1.25 + 0.6, 0);
+                seg.rotation.z = -i * 0.03;
+                seg.castShadow = true;
+                palm.add(seg);
+            }
+            // Frond crown
+            const topPos = new THREE.Vector3(0.42, 7.6, 0);
+            for (let f = 0; f < 7; f++) {
+                const ang = (f / 7) * Math.PI * 2;
+                const frond = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.08, 0.55), leafMat);
+                frond.position.set(
+                    topPos.x + Math.cos(ang) * 1.15,
+                    topPos.y - 0.15,
+                    topPos.z + Math.sin(ang) * 1.15
+                );
+                frond.rotation.y = -ang;
+                frond.rotation.z = -0.35;
+                palm.add(frond);
+            }
+            return palm;
+        }
+
+        function createFacadeTexture(baseHex, litHex) {
+            const c = document.createElement('canvas');
+            c.width = 256; c.height = 512;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = baseHex;
+            ctx.fillRect(0, 0, 256, 512);
+            for (let row = 16; row < 490; row += 28) {
+                for (let col = 14; col < 236; col += 32) {
+                    ctx.fillStyle = Math.random() > 0.28 ? litHex : '#0f172a';
+                    ctx.fillRect(col, row, 20, 18);
+                }
+            }
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            return tex;
+        }
+
+        function createSignboardTexture(topText, bottomText, bgHex, accentHex) {
+            const c = document.createElement('canvas');
+            c.width = 512; c.height = 140;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = bgHex;
+            ctx.fillRect(0, 0, 512, 140);
+            ctx.strokeStyle = accentHex;
+            ctx.lineWidth = 8;
+            ctx.strokeRect(4, 4, 504, 132);
+            ctx.fillStyle = accentHex;
+            ctx.font = 'bold 32px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(topText, 256, 54);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 30px Outfit, sans-serif';
+            ctx.fillText(bottomText, 256, 106);
+            return new THREE.CanvasTexture(c);
+        }
+
+        /***********************************************************************
+         * 5. REALISTIC ARTICULATED SKELETAL HUMAN BUILDER
+         ***********************************************************************/
+        function createRealisticHuman(opts = {}) {
+            const {
+                shirtColor = 0x0284c7,
+                jacketColor = 0x0f172a,
+                pantsColor = 0x1e293b,
+                skinColor = 0xc68642,
+                role = 'civilian', // 'player', 'civilian', 'police', 'mercenary'
+                hasHelmet = false,
+                hasGun = false
+            } = opts;
+
+            const root = new THREE.Group();
+            const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.55 });
+            const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.65 });
+            const jacketMat = new THREE.MeshStandardMaterial({ color: jacketColor, roughness: 0.45, metalness: 0.15 });
+            const pantsMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.7 });
+            const shoeMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.4 });
+
+            // Pelvis & Torso
+            const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.22, 0.28), pantsMat);
+            pelvis.position.y = 0.92;
+            root.add(pelvis);
+
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.66, 0.3), jacketMat);
+            torso.position.y = 1.34;
+            torso.castShadow = true;
+            root.add(torso);
+
+            const innerShirt = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.62, 0.32), shirtMat);
+            innerShirt.position.y = 1.34;
+            root.add(innerShirt);
+
+            // Neck & Sculpted Head
+            const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.14, 10), skinMat);
+            neck.position.y = 1.72;
+            root.add(neck);
+
+            const headGroup = new THREE.Group();
+            headGroup.position.y = 1.92;
+            const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 16), skinMat);
+            cranium.scale.set(0.92, 1.08, 0.98);
+            cranium.castShadow = true;
+            headGroup.add(cranium);
+
+            // Sunglasses
+            const shadesMat = new THREE.MeshStandardMaterial({ color: 0x090d16, metalness: 0.9, roughness: 0.1 });
+            const shades = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.12), shadesMat);
+            shades.position.set(0, 0.03, 0.16);
+            headGroup.add(shades);
+
+            if (hasHelmet || role === 'police' || role === 'mercenary') {
+                const helmetColor = role === 'police' ? 0x1e3a8a : 0x3f6212;
+                const helmet = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.235, 14, 14, 0, Math.PI * 2, 0, Math.PI * 0.62),
+                    new THREE.MeshStandardMaterial({ color: helmetColor, roughness: 0.3, metalness: 0.4 })
+                );
+                helmet.position.y = 0.02;
+                headGroup.add(helmet);
+            } else {
+                const hair = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.22, 14, 14, 0, Math.PI * 2, 0, Math.PI * 0.58),
+                    new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.85 })
+                );
+                hair.position.y = 0.03;
+                headGroup.add(hair);
+            }
+            root.add(headGroup);
+
+            // Articulated Arms
+            function buildArm(side) {
+                const shoulder = new THREE.Group();
+                shoulder.position.set(side * 0.34, 1.58, 0);
+                const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.34, 10), jacketMat);
+                upperArm.position.y = -0.15;
+                upperArm.castShadow = true;
+                shoulder.add(upperArm);
+
+                const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.32, 10), skinMat);
+                forearm.position.y = -0.44;
+                shoulder.add(forearm);
+
+                if (side === 1 && (hasGun || role === 'player' || role === 'police' || role === 'mercenary')) {
+                    const gunGroup = new THREE.Group();
+                    gunGroup.name = 'heldWeaponMesh';
+                    const receiver = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.07, 0.14, 0.62),
+                        new THREE.MeshStandardMaterial({ color: 0x18181b, metalness: 0.85, roughness: 0.25 })
+                    );
+                    receiver.position.set(0, -0.56, 0.26);
+                    gunGroup.add(receiver);
+                    shoulder.add(gunGroup);
+                }
+                root.add(shoulder);
+                return shoulder;
+            }
+            const leftArm = buildArm(-1);
+            const rightArm = buildArm(1);
+
+            // Articulated Legs
+            function buildLeg(side) {
+                const hip = new THREE.Group();
+                hip.position.set(side * 0.14, 0.88, 0);
+                const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.085, 0.44, 10), pantsMat);
+                thigh.position.y = -0.22;
+                thigh.castShadow = true;
+                hip.add(thigh);
+
+                const calf = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.068, 0.42, 10), pantsMat);
+                calf.position.y = -0.62;
+                hip.add(calf);
+
+                const boot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.28), shoeMat);
+                boot.position.set(0, -0.84, 0.05);
+                hip.add(boot);
+
+                root.add(hip);
+                return hip;
+            }
+            const leftLeg = buildLeg(-1);
+            const rightLeg = buildLeg(1);
+
+            root.userData = {
+                leftArm, rightArm, leftLeg, rightLeg, headGroup,
+                walkCycle: Math.random() * 10
+            };
+            return root;
+        }
+
+        function animateHumanSkeleton(humanMesh, speed, isAiming = false, dt = 0.016) {
+            const ud = humanMesh.userData;
+            if (!ud || !ud.leftLeg) return;
+
+            if (speed > 0.4) {
+                ud.walkCycle += dt * Math.min(18, speed * 1.45);
+                const swing = Math.sin(ud.walkCycle) * 0.68;
+                ud.leftLeg.rotation.x = swing;
+                ud.rightLeg.rotation.x = -swing;
+                ud.leftArm.rotation.x = -swing * 0.75;
+                ud.rightArm.rotation.x = isAiming ? -Math.PI / 2.1 : swing * 0.75;
+            } else {
+                ud.leftLeg.rotation.x *= 0.82;
+                ud.rightLeg.rotation.x *= 0.82;
+                ud.leftArm.rotation.x *= 0.82;
+                ud.rightArm.rotation.x = isAiming ? -Math.PI / 2.1 : ud.rightArm.rotation.x * 0.82;
+            }
+        }
+
+        /***********************************************************************
+         * 6. REALISTIC PBR VEHICLE, BUS & BATTLE TANK FACTORY
+         ***********************************************************************/
+        function createPBRVehicleMesh(typeId, hexColor) {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: hexColor,
+                metalness: typeId === 'tank' ? 0.45 : 0.78,
+                roughness: typeId === 'tank' ? 0.55 : 0.18
+            });
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x090d16, metalness: 0.95, roughness: 0.08 });
+            const tireMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 });
+            const rimMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 });
+            const headLightMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
+            const tailLightMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+
+            function addWheel(x, y, z, r = 0.45, w = 0.3) {
+                const wGroup = new THREE.Group();
+                const tire = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 16), tireMat);
+                tire.rotation.z = Math.PI / 2;
+                const rim = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.62, r * 0.62, w + 0.02, 10), rimMat);
+                rim.rotation.z = Math.PI / 2;
+                wGroup.add(tire, rim);
+                wGroup.position.set(x, y, z);
+                group.add(wGroup);
+            }
+
+            if (typeId === 'tank') {
+                // Rhino Battle Tank
+                const hull = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.35, 6.8), bodyMat);
+                hull.position.y = 1.05;
+                hull.castShadow = true;
+                const treadsL = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.1, 6.6), tireMat);
+                treadsL.position.set(-1.65, 0.65, 0);
+                const treadsR = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.1, 6.6), tireMat);
+                treadsR.position.set(1.65, 0.65, 0);
+
+                const turret = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.95, 2.9), bodyMat);
+                turret.position.set(0, 2.15, -0.3);
+                turret.castShadow = true;
+
+                const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 4.6, 12), rimMat);
+                barrel.rotation.x = Math.PI / 2;
+                barrel.position.set(0, 2.15, 2.8);
+
+                group.add(hull, treadsL, treadsR, turret, barrel);
+            } else if (typeId === 'bus') {
+                // TNSTC Route 70 Coimbatore City Bus
+                addWheel(-1.35, 0.58, 2.6, 0.58, 0.38);
+                addWheel(1.35, 0.58, 2.6, 0.58, 0.38);
+                addWheel(-1.35, 0.58, -2.6, 0.58, 0.38);
+                addWheel(1.35, 0.58, -2.6, 0.58, 0.38);
+
+                const busBody = new THREE.Mesh(new THREE.BoxGeometry(2.85, 2.65, 8.2), bodyMat);
+                busBody.position.y = 1.75;
+                busBody.castShadow = true;
+
+                const windowStrip = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.95, 7.6), glassMat);
+                windowStrip.position.y = 2.15;
+
+                const roof = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.18, 8.0), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 }));
+                roof.position.y = 3.12;
+
+                const routeSign = createSignboardTexture('காந்திபுரம் - மருதமலை 70', 'TNSTC ROUTE 70 CITY BUS', '#0f172a', '#facc15');
+                const board = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.48), new THREE.MeshBasicMaterial({ map: routeSign }));
+                board.position.set(0, 2.82, 4.12);
+
+                group.add(busBody, windowStrip, roof, board);
+            } else if (typeId === 'bullet') {
+                // Royal Enfield Classic 350 Chrome
+                addWheel(0, 0.42, 1.05, 0.42, 0.18);
+                addWheel(0, 0.42, -1.05, 0.42, 0.22);
+                const frame = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.55, 1.45), rimMat);
+                frame.position.set(0, 0.72, 0);
+                const tank = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 14), bodyMat);
+                tank.scale.set(0.85, 0.75, 1.55);
+                tank.position.set(0, 1.08, 0.25);
+                const seat = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, 0.85), tireMat);
+                seat.position.set(0, 0.92, -0.45);
+                const fork = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.05, 8), rimMat);
+                fork.position.set(0, 0.92, 0.85);
+                fork.rotation.x = -0.28;
+                const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.14, 12), headLightMat);
+                lamp.rotation.x = Math.PI / 2;
+                lamp.position.set(0, 1.25, 0.95);
+                group.add(frame, tank, seat, fork, lamp);
+            } else if (typeId === 'auto') {
+                // TN-38 Yellow-Black Auto Rickshaw
+                addWheel(0, 0.32, 1.15, 0.32, 0.18);
+                addWheel(-0.82, 0.32, -1.0, 0.32, 0.18);
+                addWheel(0.82, 0.32, -1.0, 0.32, 0.18);
+                const lower = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.78, 2.55), new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.35 }));
+                lower.position.y = 0.68;
+                lower.castShadow = true;
+                const canopy = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.85, 2.25), new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.7 }));
+                canopy.position.set(0, 1.48, -0.1);
+                const shield = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.65, 0.08), glassMat);
+                shield.position.set(0, 1.38, 1.05);
+                group.add(lower, canopy, shield);
+            } else {
+                // Supercar GT-R, Thar 4x4 SUV, or Police SUV
+                const isSUV = typeId === 'thar' || typeId === 'police';
+                const wr = isSUV ? 0.52 : 0.44;
+                addWheel(-1.12, wr, 1.55, wr, 0.34);
+                addWheel(1.12, wr, 1.55, wr, 0.34);
+                addWheel(-1.12, wr, -1.55, wr, 0.34);
+                addWheel(1.12, wr, -1.55, wr, 0.34);
+
+                const chassisH = isSUV ? 0.95 : 0.68;
+                const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.28, chassisH, 4.75), bodyMat);
+                chassis.position.y = wr + chassisH / 2;
+                chassis.castShadow = true;
+
+                const cabinH = isSUV ? 0.82 : 0.56;
+                const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.94, cabinH, isSUV ? 2.65 : 2.15), glassMat);
+                cabin.position.set(0, wr + chassisH + cabinH / 2 - 0.06, -0.2);
+
+                const roof = new THREE.Mesh(new THREE.BoxGeometry(1.88, 0.08, isSUV ? 2.55 : 2.0), bodyMat);
+                roof.position.set(0, wr + chassisH + cabinH - 0.04, -0.2);
+
+                const hlL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.1), headLightMat);
+                hlL.position.set(-0.78, wr + 0.45, 2.38);
+                const hlR = hlL.clone();
+                hlR.position.x = 0.78;
+
+                const tlL = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.16, 0.1), tailLightMat);
+                tlL.position.set(-0.75, wr + 0.48, -2.38);
+                const tlR = tlL.clone();
+                tlR.position.x = 0.75;
+
+                group.add(chassis, cabin, roof, hlL, hlR, tlL, tlR);
+
+                if (typeId === 'police') {
+                    // Red & Blue Police Lightbar
+                    const barRed = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.16, 0.28), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+                    barRed.position.set(-0.34, wr + chassisH + cabinH + 0.08, -0.1);
+                    const barBlue = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.16, 0.28), new THREE.MeshBasicMaterial({ color: 0x3b82f6 }));
+                    barBlue.position.set(0.34, wr + chassisH + cabinH + 0.08, -0.1);
+                    group.add(barRed, barBlue);
+                }
+            }
+            return group;
+        }
+
+        /***********************************************************************
+         * 7. TERRAIN HEIGHT & REALISTIC COIMBATORE WORLD GENERATOR
+         ***********************************************************************/
+        function getGroundHeightAt(x, z) {
+            // 1. Avinashi Road Elevated Flyover Ramp (x from -90 to 160 along z = 30)
+            if (Math.abs(z - 30) < 9.5 && x > -90 && x < 160) {
+                if (x < -45) return ((x + 90) / 45) * 6.5;
+                if (x > 115) return ((160 - x) / 45) * 6.5;
+                return 6.5;
+            }
+            // 2. Western Ghats Marudhamalai Temple Hilltop (North-West Corner)
+            const distHill = Math.hypot(x - (-350), z - (-250));
+            if (distHill < 88) {
+                return Math.cos((distHill / 88) * (Math.PI / 2)) * 26;
+            }
+            return 0;
+        }
+
+        function initRealisticWorld() {
+            const container = document.getElementById('game-canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1e293b);
+            scene.fog = new THREE.FogExp2(0x1e293b, 0.0017);
+
+            camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.4, 950);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.15;
+            container.appendChild(renderer.domElement);
+
+            // Realistic Lighting
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+            scene.add(ambientLight);
+
+            hemiLight = new THREE.HemisphereLight(0xbae6fd, 0x1e293b, 0.55);
+            scene.add(hemiLight);
+
+            sunLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
+            sunLight.position.set(160, 240, 120);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            const d = 280;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            muzzleLight = new THREE.PointLight(0xfbbf24, 0, 18);
+            scene.add(muzzleLight);
+
+            // Ground Terrain
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e2621, roughness: 0.92 });
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Procedural Asphalt Highway Network
+            const asphaltTex = createAsphaltTexture();
+            function buildRoad(x1, z1, x2, z2, width = 18) {
+                const len = Math.hypot(x2 - x1, z2 - z1);
+                const tex = asphaltTex.clone();
+                tex.needsUpdate = true;
+                tex.repeat.set(1, Math.max(1, len / 22));
+                const road = new THREE.Mesh(
+                    new THREE.PlaneGeometry(width, len),
+                    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 })
+                );
+                road.rotation.x = -Math.PI / 2;
+                road.rotation.z = Math.atan2(x2 - x1, z2 - z1);
+                road.position.set((x1 + x2) / 2, 0.06, (z1 + z2) / 2);
+                road.receiveShadow = true;
+                scene.add(road);
+            }
+
+            // Authentic Coimbatore Arterial Grid
+            buildRoad(-260, 30, 380, 30, 20);   // Avinashi Road
+            buildRoad(-250, 0, 280, 0, 18);     // Gandhipuram / 100ft Rd
+            buildRoad(-35, -240, -35, 280, 18); // Cross Cut Road (Venky Complex / Webnox HQ)
+            buildRoad(80, -260, 80, 180, 18);   // Sathy Road (Prozone Mall & Saravanampatti IT Hub)
+            buildRoad(-165, -260, -165, 200, 16); // Mettupalayam Road & R.S. Puram
+            buildRoad(235, -80, 235, 240, 16);  // TIDEL Park Link Road
+            buildRoad(-180, 195, 280, 195, 16); // South Town Hall / Ukkadam Bypass
+
+            // Avinashi Road Elevated Flyover Deck & Pillars
+            const flyMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.65 });
+            const deck = new THREE.Mesh(new THREE.BoxGeometry(160, 0.8, 17), flyMat);
+            deck.position.set(35, 6.2, 30);
+            deck.receiveShadow = true;
+            deck.castShadow = true;
+            scene.add(deck);
+
+            const rampW = new THREE.Mesh(new THREE.BoxGeometry(46, 0.8, 17), flyMat);
+            rampW.position.set(-67.5, 3.1, 30);
+            rampW.rotation.z = Math.atan2(6.5, 45);
+            scene.add(rampW);
+
+            const rampE = new THREE.Mesh(new THREE.BoxGeometry(46, 0.8, 17), flyMat);
+            rampE.position.set(137.5, 3.1, 30);
+            rampE.rotation.z = -Math.atan2(6.5, 45);
+            scene.add(rampE);
+
+            for (let px = -40; px <= 110; px += 30) {
+                const pillar = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 6.2, 12), flyMat);
+                pillar.position.set(px, 3.1, 30);
+                scene.add(pillar);
+            }
+
+            // Ukkadam Valankulam Lake & Singanallur Lake
+            const waterMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.12, metalness: 0.8 });
+            const ukkadam = new THREE.Mesh(new THREE.PlaneGeometry(170, 85), waterMat);
+            ukkadam.rotation.x = -Math.PI / 2;
+            ukkadam.position.set(-65, 0.08, 275);
+            scene.add(ukkadam);
+
+            // Ukkadam Smart City "I ♥ KOVAI" Illuminated Board on Lakefront Bund
+            const kovaiLoveTex = createSignboardTexture('நம்ம கோவை • ஸ்மார்ட் சிட்டி', 'I ♥ KOVAI • UKKADAM LAKEFRONT', '#0f172a', '#f43f5e');
+            const kovaiBoard = new THREE.Mesh(new THREE.PlaneGeometry(18, 4.5), new THREE.MeshBasicMaterial({ map: kovaiLoveTex, side: THREE.DoubleSide }));
+            kovaiBoard.position.set(-55, 3.2, 232);
+            scene.add(kovaiBoard);
+
+            // Marudhamalai Hill & Multi-Tier Golden Dravidian Rajagopuram Temple
+            const hill = new THREE.Mesh(
+                new THREE.CylinderGeometry(30, 88, 26, 24),
+                new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.9 })
+            );
+            hill.position.set(-350, 13, -250);
+            scene.add(hill);
+
+            const gopuramGroup = new THREE.Group();
+            gopuramGroup.position.set(-350, 26, -250);
+            const tierColors = [0xd97706, 0xf59e0b, 0xfbbf24, 0xfef08a];
+            for (let t = 0; t < 5; t++) {
+                const tier = new THREE.Mesh(
+                    new THREE.BoxGeometry(10 - t * 1.5, 2.4, 7 - t * 1.0),
+                    new THREE.MeshStandardMaterial({ color: tierColors[t % tierColors.length], roughness: 0.35, metalness: 0.4 })
+                );
+                tier.position.y = t * 2.3 + 1.2;
+                gopuramGroup.add(tier);
+            }
+            const kalasam = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 3.5, 8), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+            kalasam.position.y = 13.0;
+            kalasam.rotation.z = Math.PI / 2;
+            gopuramGroup.add(kalasam);
+            scene.add(gopuramGroup);
+
+            // PSG College of Technology Iconic Pedestrian Skywalk Footbridge over Avinashi Road (Peelamedu)
+            const psgBridge = new THREE.Group();
+            psgBridge.position.set(150, 0, 30);
+            const pL = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.75, 7.5, 10), flyMat);
+            pL.position.set(0, 3.75, -11);
+            const pR = pL.clone();
+            pR.position.z = 11;
+            const skywalk = new THREE.Mesh(
+                new THREE.BoxGeometry(4.5, 3.0, 24),
+                new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.75, roughness: 0.2 })
+            );
+            skywalk.position.y = 7.2;
+            const psgSignTex = createSignboardTexture('பி.எஸ்.ஜி தொழில்நுட்பக் கல்லூரி', 'PSG COLLEGE OF TECHNOLOGY • EST 1951', '#1e3a8a', '#facc15');
+            const psgBanner = new THREE.Mesh(new THREE.PlaneGeometry(14, 2.4), new THREE.MeshBasicMaterial({ map: psgSignTex, side: THREE.DoubleSide }));
+            psgBanner.rotation.y = Math.PI / 2;
+            psgBanner.position.set(2.35, 7.2, 0);
+            psgBridge.add(pL, pR, skywalk, psgBanner);
+            scene.add(psgBridge);
+
+            // Coimbatore International Airport (CJB) Runway 05/23 & Parked Passenger Jet
+            const runway = new THREE.Mesh(
+                new THREE.PlaneGeometry(120, 22),
+                new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.85 })
+            );
+            runway.rotation.x = -Math.PI / 2;
+            runway.position.set(355, 0.08, 68);
+            scene.add(runway);
+
+            const jetGroup = new THREE.Group();
+            const whiteJetMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.5, roughness: 0.2 });
+            const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 22, 14), whiteJetMat);
+            fuselage.rotation.z = Math.PI / 2;
+            fuselage.position.y = 2.6;
+            const wings = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.25, 20), whiteJetMat);
+            wings.position.y = 2.4;
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(2.8, 4.5, 0.3), new THREE.MeshStandardMaterial({ color: 0x0284c7 }));
+            tail.position.set(-9.5, 4.8, 0);
+            jetGroup.add(fuselage, wings, tail);
+            jetGroup.position.set(345, 0, 68);
+            scene.add(jetGroup);
+
+            // Authentic Indian NHAI Green Highway Overhead Gantry Signboards
+            function buildHighwayGantry(x, z, rotY, code, tamil, eng, dist) {
+                const g = new THREE.Group();
+                g.position.set(x, 0, z);
+                g.rotation.y = rotY;
+                const poleMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8 });
+                const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 8.5, 8), poleMat);
+                p1.position.set(-9.5, 4.25, 0);
+                const p2 = p1.clone();
+                p2.position.x = 9.5;
+                const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 20, 8), poleMat);
+                beam.rotation.z = Math.PI / 2;
+                beam.position.y = 8.2;
+                const tex = createHighwayGantryTexture(code, tamil, eng, dist);
+                const board = new THREE.Mesh(new THREE.PlaneGeometry(15.5, 4.2), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
+                board.position.set(0, 8.2, 0.25);
+                g.add(p1, p2, beam, board);
+                scene.add(g);
+            }
+
+            buildHighwayGantry(-35, -18, 0, 'SH 164', 'கிராஸ் கட் ரோடு • வெப்நாக்ஸ்', 'CROSS CUT RD • WEBNOX HQ', '↑ 50m AHEAD • PIN 641012');
+            buildHighwayGantry(105, 30, Math.PI / 2, 'NH 544', 'பீளமேடு • டைடல் பார்க் • விமான நிலையம்', 'PEELAMEDU • TIDEL PARK • AIRPORT', '↑ 1.5 KM EAST');
+            buildHighwayGantry(80, -85, 0, 'NH 948', 'புரோசோன் மால் • சரவணம்பட்டி ஐடி பார்க்', 'PROZONE MALL • SARAVANAMPATTI IT SEZ', '↑ SATHY ROAD NORTH');
+            buildHighwayGantry(-115, 30, -Math.PI / 2, 'NH 181', 'ஆர்.எஸ்.புரம் • மருதமலை கோவில்', 'R.S. PURAM • MARUDHAMALAI TEMPLE', '↑ WEST GHAT ROAD');
+
+            // Plant 45 Authentic Tamil Nadu Coconut Palm Trees across avenues & lakes
+            for (let p = 0; p < 45; p++) {
+                const palm = createCoconutPalmTree();
+                const angle = (p / 45) * Math.PI * 2;
+                const radius = 50 + (p % 5) * 48;
+                const px = Math.cos(angle) * radius;
+                const pz = Math.sin(angle) * radius;
+                if (Math.abs(pz - 30) < 14 || Math.abs(px + 35) < 14) continue;
+                palm.position.set(px, getGroundHeightAt(px, pz), pz);
+                scene.add(palm);
+            }
+
+            // Procedural Multi-Story Glass Facade Textures
+            const facadeTextures = [
+                createFacadeTexture('#0f172a', '#38bdf8'),
+                createFacadeTexture('#1e293b', '#fef08a'),
+                createFacadeTexture('#172554', '#60a5fa'),
+                createFacadeTexture('#18181b', '#f59e0b')
+            ];
+
+            // Build Flagship Webnox Technologies HQ (Venky Complex, 2nd Floor, Cross Cut Road, Seth Narang Das Layout)
+            const webnoxGroup = new THREE.Group();
+            webnoxGroup.position.set(-38, 0, -48);
+            const venkyBuilding = new THREE.Mesh(
+                new THREE.BoxGeometry(24, 22, 18),
+                new THREE.MeshStandardMaterial({ map: facadeTextures[0], roughness: 0.22, metalness: 0.65 })
+            );
+            venkyBuilding.position.y = 11;
+            venkyBuilding.castShadow = true;
+            venkyBuilding.receiveShadow = true;
+            webnoxGroup.add(venkyBuilding);
+
+            // Highlighted 2nd Floor Glass Balcony for Webnox Technologies
+            const secondFloorGlow = new THREE.Mesh(
+                new THREE.BoxGeometry(24.6, 3.8, 18.6),
+                new THREE.MeshBasicMaterial({ color: 0x06b6d4, wireframe: true })
+            );
+            secondFloorGlow.position.y = 7.2;
+            webnoxGroup.add(secondFloorGlow);
+
+            const webnoxSignTex = createSignboardTexture(
+                'வெப்நாக்ஸ் டெக்னாலஜிஸ் • VENKY COMPLEX 2ND FLOOR',
+                'WEBNOX TECHNOLOGIES HQ • CROSS CUT RD',
+                '#082f49',
+                '#22d3ee'
+            );
+            const webnoxBoard = new THREE.Mesh(
+                new THREE.PlaneGeometry(23, 5.0),
+                new THREE.MeshBasicMaterial({ map: webnoxSignTex, side: THREE.DoubleSide })
+            );
+            webnoxBoard.position.set(0, 24.8, 9.2);
+            webnoxGroup.add(webnoxBoard);
+
+            // Glowing Interactive Cyan Ring Marker in front of Venky Complex Entrance
+            webnoxMarkerRing = new THREE.Mesh(
+                new THREE.TorusGeometry(2.8, 0.18, 12, 32),
+                new THREE.MeshBasicMaterial({ color: 0x22d3ee })
+            );
+            webnoxMarkerRing.rotation.x = Math.PI / 2;
+            webnoxMarkerRing.position.set(0, 0.35, 14);
+            webnoxGroup.add(webnoxMarkerRing);
+            scene.add(webnoxGroup);
+            buildingColliders.push({ x: -38, z: -48, r: 12 });
+
+            // Build Landmark Towers & Tamil/English Neon Billboards
+            KOVAI_LANDMARKS.forEach((lm, idx) => {
+                if (lm.id === 'webnox') return; // Already built in detail above
+                const bGroup = new THREE.Group();
+                const gy = getGroundHeightAt(lm.x, lm.z);
+                bGroup.position.set(lm.x, gy, lm.z - 24);
+
+                const bh = lm.id === 'tidelpark' ? 42 : 20 + (idx % 4) * 6;
+                const bw = 24;
+                const bd = 18;
+                const tower = new THREE.Mesh(
+                    new THREE.BoxGeometry(bw, bh, bd),
+                    new THREE.MeshStandardMaterial({ map: facadeTextures[idx % facadeTextures.length], roughness: 0.25, metalness: 0.6 })
+                );
+                tower.position.y = bh / 2;
+                tower.castShadow = true;
+                tower.receiveShadow = true;
+                bGroup.add(tower);
+
+                const signTex = createSignboardTexture(lm.tamil, lm.name.split('(')[0].trim().toUpperCase(), '#090d16', lm.color);
+                const signMesh = new THREE.Mesh(
+                    new THREE.PlaneGeometry(20, 4.4),
+                    new THREE.MeshBasicMaterial({ map: signTex, side: THREE.DoubleSide })
+                );
+                signMesh.position.set(0, bh + 2.5, bd / 2 + 0.15);
+                bGroup.add(signMesh);
+
+                scene.add(bGroup);
+                buildingColliders.push({ x: lm.x, z: lm.z - 24, r: 13 });
+            });
+
+            // Additional City Skyline Towers & Coconut Palms
+            for (let i = 0; i < 65; i++) {
+                const bx = (Math.random() - 0.5) * 620;
+                const bz = (Math.random() - 0.5) * 520;
+                if (Math.abs(bz - 30) < 24 || Math.abs(bz) < 22 || Math.abs(bx + 35) < 24 || Math.abs(bx - 80) < 22) continue;
+
+                const h = 14 + Math.random() * 32;
+                const w = 12 + Math.random() * 12;
+                const mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(w, h, w),
+                    new THREE.MeshStandardMaterial({ map: facadeTextures[i % facadeTextures.length], roughness: 0.35 })
+                );
+                mesh.position.set(bx, h / 2, bz);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                scene.add(mesh);
+                buildingColliders.push({ x: bx, z: bz, r: w * 0.58 });
+            }
+
+            // Battleground Shrinking EMP Storm Cylinder
+            const zoneGeo = new THREE.CylinderGeometry(state.bgZoneRadius, state.bgZoneRadius, 140, 48, 1, true);
+            const zoneMat = new THREE.MeshBasicMaterial({
+                color: 0xf43f5e,
+                transparent: true,
+                opacity: 0.22,
+                side: THREE.DoubleSide
+            });
+            empZoneCylinder = new THREE.Mesh(zoneGeo, zoneMat);
+            empZoneCylinder.position.set(0, 65, 0);
+            empZoneCylinder.visible = false;
+            scene.add(empZoneCylinder);
+
+            // Create Articulated Player Character
+            playerHuman = createRealisticHuman({
+                shirtColor: 0xf59e0b,
+                jacketColor: 0x0f172a,
+                pantsColor: 0x1e293b,
+                role: 'player',
+                hasGun: true
+            });
+            playerHuman.position.copy(player.pos);
+            scene.add(playerHuman);
+
+            // Jetpack Mesh attached to Player Back
+            jetpackMesh = new THREE.Group();
+            const cylL = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.5, 10), new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9 }));
+            cylL.position.set(-0.12, 1.38, -0.22);
+            const cylR = cylL.clone();
+            cylR.position.x = 0.12;
+            const flame = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.45, 8), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+            flame.rotation.x = Math.PI;
+            flame.position.set(0, 1.0, -0.22);
+            jetpackMesh.add(cylL, cylR, flame);
+            jetpackMesh.visible = false;
+            playerHuman.add(jetpackMesh);
+
+            // Spawn Parked Exotic & Kovai Vehicles right outside Webnox Technologies (Venky Complex, Cross Cut Rd)
+            spawnVehicle('gtr', -31, -30, 0);       // Webnox Founder V10 Supercar
+            spawnVehicle('bullet', -43, -30, 0.2);  // Royal Classic 350 Chrome
+            spawnVehicle('thar', -25, -26, -0.3);   // Mahindra Thar 4x4 Black
+            spawnVehicle('bus', -12, -10, Math.PI); // TNSTC Route 70 Bus
+            spawnVehicle('auto', -45, -22, Math.PI / 2);
+            spawnVehicle('gtr', 230, 18, -Math.PI / 2); // At TIDEL Park
+
+            // Spawn Moving AI Traffic Vehicles
+            for (let i = 0; i < 16; i++) {
+                const types = ['gtr', 'thar', 'auto', 'bullet', 'bus'];
+                const t = types[i % types.length];
+                const isEW = i % 2 === 0;
+                const vx = (Math.random() - 0.5) * 420;
+                const vz = isEW ? (i % 4 === 0 ? 26 : -4) : -31;
+                const v = spawnVehicle(t, vx, vz, isEW ? Math.PI / 2 : 0, true);
+                v.aiSpeed = 16 + Math.random() * 14;
+            }
+
+            // Spawn Realistic Pedestrians & Civilians
+            const shirtPalette = [0x06b6d4, 0x10b981, 0xf59e0b, 0xec4899, 0x3b82f6, 0xa855f7, 0xf8fafc];
+            for (let i = 0; i < 38; i++) {
+                const px = (Math.random() - 0.5) * 360;
+                const pz = (Math.random() - 0.5) * 280;
+                spawnHumanEntity({
+                    x: px, z: pz,
+                    role: 'civilian',
+                    shirtColor: shirtPalette[i % shirtPalette.length],
+                    jacketColor: i % 2 === 0 ? 0x1e293b : 0x334155
+                });
+            }
+        }
+
+        function spawnVehicle(typeId, x, z, rotY = 0, isAI = false) {
+            const spec = VEHICLE_CATALOG.find(v => v.id === typeId) || VEHICLE_CATALOG[0];
+            const mesh = createPBRVehicleMesh(typeId, spec.color);
+            const y = getGroundHeightAt(x, z);
+            mesh.position.set(x, y, z);
+            mesh.rotation.y = rotY;
+            scene.add(mesh);
+
+            const vObj = {
+                typeId, spec, mesh,
+                speed: 0,
+                isAI,
+                isPolice: typeId === 'police',
+                aiSpeed: isAI ? 20 : 0,
+                health: typeId === 'tank' ? 2000 : 300
+            };
+            allVehicles.push(vObj);
+            return vObj;
+        }
+
+        function spawnHumanEntity({ x, z, role = 'civilian', shirtColor = 0x38bdf8, jacketColor = 0x0f172a }) {
+            const mesh = createRealisticHuman({
+                role,
+                shirtColor,
+                jacketColor,
+                hasGun: role === 'police' || role === 'mercenary',
+                hasHelmet: role === 'police' || role === 'mercenary'
+            });
+            const y = getGroundHeightAt(x, z);
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+
+            const entity = {
+                mesh,
+                role,
+                health: role === 'mercenary' ? 140 : (role === 'police' ? 110 : 80),
+                dead: false,
+                rotY: Math.random() * Math.PI * 2,
+                speed: role === 'civilian' ? 3.2 : 6.8,
+                fireCooldown: 0.8 + Math.random()
+            };
+            allHumans.push(entity);
+            return entity;
+        }
+
+        /***********************************************************************
+         * 8. GTA 6 COMBAT, RAYCAST BALLISTICS, EXPLOSIONS & HIJACKING
+         ***********************************************************************/
+        function cycleWeapon(dir = 1) {
+            state.weaponIdx = (state.weaponIdx + dir + WEAPONS_ARSENAL.length) % WEAPONS_ARSENAL.length;
+            selectWeaponIndex(state.weaponIdx);
+        }
+
+        function selectWeaponIndex(idx) {
+            state.weaponIdx = idx;
+            const w = WEAPONS_ARSENAL[state.weaponIdx];
+            document.getElementById('hud-weapon-icon').className = `fa-solid ${w.icon} text-amber-400 text-lg`;
+            document.getElementById('hud-weapon-name').textContent = w.name;
+            document.getElementById('hud-weapon-ammo').textContent = state.infiniteAmmo ? '∞ / ∞' : `${w.ammo} [Q]`;
+
+            if (playerHuman) {
+                const gunMesh = playerHuman.getObjectByName('heldWeaponMesh');
+                if (gunMesh) gunMesh.visible = w.id !== 'fist';
+            }
+        }
+
+        function startFiring() {
+            state.isFiring = true;
+            triggerFireWeapon();
+        }
+
+        function stopFiring() {
+            state.isFiring = false;
+        }
+
+        function triggerFireWeapon() {
+            if (state.isWasted) return;
+            const now = performance.now() / 1000;
+
+            // If inside Rhino Battle Tank, fire 120mm Tank Shell!
+            if (player.inVehicle && player.inVehicle.typeId === 'tank') {
+                if (now - state.lastFireTime < 1.1) return;
+                state.lastFireTime = now;
+                const pPos = player.inVehicle.mesh.position.clone().add(new THREE.Vector3(0, 2.2, 0));
+                const forward = new THREE.Vector3(Math.sin(player.rotY), -0.02, Math.cos(player.rotY)).normalize();
+                spawnRocketProjectile(pPos.add(forward.clone().multiplyScalar(3.5)), forward);
+                sfx.playExplosion();
+                return;
+            }
+
+            const w = WEAPONS_ARSENAL[state.weaponIdx];
+            if (now - state.lastFireTime < w.fireRate) return;
+            if (!state.infiniteAmmo && w.ammo !== '∞') {
+                if (w.ammo <= 0) {
+                    showDialogue('Ammunition Depleted', 'Type FULLCLIP or UZUMYMW for infinite ammo!', 'fa-gun');
+                    return;
+                }
+                w.ammo--;
+            }
+            state.lastFireTime = now;
+            selectWeaponIndex(state.weaponIdx);
+
+            const origin = player.pos.clone().add(new THREE.Vector3(0, 1.55, 0));
+            const baseDir = new THREE.Vector3(
+                Math.sin(player.rotY) * Math.cos(player.pitch),
+                -Math.sin(player.pitch) * 0.45,
+                Math.cos(player.rotY) * Math.cos(player.pitch)
+            ).normalize();
+
+            if (w.isRocket) {
+                sfx.playGunshot('shotgun');
+                spawnRocketProjectile(origin.clone().add(baseDir.clone().multiplyScalar(1.2)), baseDir);
+                return;
+            }
+
+            sfx.playGunshot(w.id);
+
+            if (w.id !== 'fist') {
+                muzzleLight.position.copy(origin).add(baseDir.clone().multiplyScalar(1.1));
+                muzzleLight.intensity = 5.5;
+                setTimeout(() => { muzzleLight.intensity = 0; }, 55);
+            }
+
+            for (let p = 0; p < w.pellets; p++) {
+                const dir = baseDir.clone();
+                dir.x += (Math.random() - 0.5) * w.spread;
+                dir.y += (Math.random() - 0.5) * w.spread;
+                dir.z += (Math.random() - 0.5) * w.spread;
+                dir.normalize();
+
+                let hitPoint = origin.clone().add(dir.clone().multiplyScalar(w.range));
+                let closestDist = w.range;
+                let hitHuman = null;
+                let hitVehicle = null;
+
+                allHumans.forEach(h => {
+                    if (h.dead) return;
+                    const hCenter = h.mesh.position.clone().add(new THREE.Vector3(0, 1.1, 0));
+                    const toH = hCenter.clone().sub(origin);
+                    const proj = toH.dot(dir);
+                    if (proj > 0 && proj < closestDist) {
+                        const perpDist = toH.clone().sub(dir.clone().multiplyScalar(proj)).length();
+                        if (perpDist < 0.85) {
+                            closestDist = proj;
+                            hitHuman = h;
+                            hitPoint = origin.clone().add(dir.clone().multiplyScalar(proj));
+                        }
+                    }
+                });
+
+                allVehicles.forEach(v => {
+                    if (v === player.inVehicle) return;
+                    const vCenter = v.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0));
+                    const toV = vCenter.clone().sub(origin);
+                    const proj = toV.dot(dir);
+                    if (proj > 0 && proj < closestDist) {
+                        const perpDist = toV.clone().sub(dir.clone().multiplyScalar(proj)).length();
+                        if (perpDist < 2.2) {
+                            closestDist = proj;
+                            hitVehicle = v;
+                            hitHuman = null;
+                            hitPoint = origin.clone().add(dir.clone().multiplyScalar(proj));
+                        }
+                    }
+                });
+
+                if (w.id !== 'fist') {
+                    spawnBulletTracer(origin.clone().add(new THREE.Vector3(0, 0.05, 0)), hitPoint);
+                }
+
+                if (hitHuman) {
+                    damageHumanEntity(hitHuman, w.damage, dir);
+                } else if (hitVehicle) {
+                    hitVehicle.health -= w.damage;
+                    if (hitVehicle.health <= 0) {
+                        triggerExplosionAt(hitVehicle.mesh.position.clone());
+                        hitVehicle.health = 300;
+                    }
+                }
+            }
+        }
+
+        function spawnBulletTracer(start, end) {
+            const geo = new THREE.BufferGeometry().setFromPoints([start, end]);
+            const mat = new THREE.LineBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.85 });
+            const line = new THREE.Line(geo, mat);
+            scene.add(line);
+            bulletTracers.push({ line, life: 0.07 });
+        }
+
+        function spawnRocketProjectile(startPos, dir) {
+            const rocket = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.12, 0.12, 0.9, 8),
+                new THREE.MeshBasicMaterial({ color: 0xf97316 })
+            );
+            rocket.rotation.x = Math.PI / 2;
+            rocket.position.copy(startPos);
+            scene.add(rocket);
+            activeRockets.push({ mesh: rocket, dir: dir.clone(), speed: 85, life: 3.0 });
+        }
+
+        function triggerExplosionAt(pos) {
+            sfx.playExplosion();
+
+            for (let i = 0; i < 28; i++) {
+                const p = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.45 + Math.random() * 0.85, 8, 8),
+                    new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0xf97316 : 0xfacc15 })
+                );
+                p.position.copy(pos);
+                scene.add(p);
+                explosionParticles.push({
+                    mesh: p,
+                    vel: new THREE.Vector3((Math.random() - 0.5) * 28, 6 + Math.random() * 20, (Math.random() - 0.5) * 28),
+                    life: 0.75 + Math.random() * 0.4
+                });
+            }
+
+            allHumans.forEach(h => {
+                if (h.dead) return;
+                const d = h.mesh.position.distanceTo(pos);
+                if (d < 16) {
+                    const blastDir = h.mesh.position.clone().sub(pos).normalize();
+                    damageHumanEntity(h, 250, blastDir);
+                }
+            });
+
+            allVehicles.forEach(v => {
+                const d = v.mesh.position.distanceTo(pos);
+                if (d < 16) {
+                    v.mesh.position.y += 2.8;
+                    v.mesh.rotation.z += (Math.random() - 0.5) * 0.5;
+                }
+            });
+
+            if (!state.battlegroundActive) escalateWantedLevel(2);
+        }
+
+        function damageHumanEntity(h, dmg, knockDir) {
+            h.health -= dmg;
+            h.mesh.position.add(knockDir.clone().multiplyScalar(0.35));
+
+            if (h.health <= 0 && !h.dead) {
+                h.dead = true;
+                h.mesh.rotation.x = -Math.PI / 2;
+                h.mesh.position.y = getGroundHeightAt(h.mesh.position.x, h.mesh.position.z) + 0.25;
+
+                const loot = h.role === 'mercenary' ? 25000 : 2500;
+                state.cash += loot;
+
+                if (h.role === 'mercenary') {
+                    state.bgKills++;
+                    updateBattlegroundHUD();
+                } else if (!state.battlegroundActive) {
+                    escalateWantedLevel(h.role === 'police' ? 2 : 1);
+                }
+                updateHUD();
+
+                setTimeout(() => {
+                    h.dead = false;
+                    h.health = 100;
+                    h.mesh.rotation.x = 0;
+                    h.mesh.position.set(
+                        player.pos.x + (Math.random() - 0.5) * 180,
+                        0,
+                        player.pos.z + (Math.random() - 0.5) * 180
+                    );
+                }, 9000);
+            }
+        }
+
+        function damagePlayer(amount) {
+            if (state.godMode || state.isWasted) return;
+            if (state.armor > 0) {
+                const absorb = Math.min(state.armor, amount * 0.7);
+                state.armor -= absorb;
+                amount -= absorb;
+            }
+            state.health = Math.max(0, state.health - amount);
+
+            const vig = document.getElementById('damage-vignette');
+            vig.style.opacity = '1';
+            setTimeout(() => { vig.style.opacity = '0'; }, 260);
+            updateHUD();
+
+            if (state.health <= 0) {
+                triggerPlayerWasted();
+            }
+        }
+
+        function triggerPlayerWasted() {
+            state.isWasted = true;
+            const ov = document.getElementById('wasted-overlay');
+            document.getElementById('wasted-title').textContent = state.wantedStars >= 3 ? 'BUSTED' : 'WASTED';
+            ov.classList.remove('hidden');
+            ov.classList.add('flex');
+
+            setTimeout(() => {
+                state.isWasted = false;
+                state.health = 100;
+                state.armor = 50;
+                state.wantedStars = 0;
+                if (player.inVehicle) hijackOrEnterExitVehicle();
+                player.pos.set(-38, 0, -28); // Respawn at Webnox HQ
+                ov.classList.add('hidden');
+                ov.classList.remove('flex');
+                updateHUD();
+                showDialogue('Coimbatore Medical Center', 'You have been discharged and returned to Webnox Technologies HQ.', 'fa-kit-medical');
+            }, 3400);
+        }
+
+        /***********************************************************************
+         * 9. 5-STAR TAMIL NADU POLICE WANTED PURSUIT SYSTEM
+         ***********************************************************************/
+        function escalateWantedLevel(addStars = 1) {
+            const prev = state.wantedStars;
+            state.wantedStars = Math.min(5, state.wantedStars + addStars);
+            state.wantedDecayTimer = 28;
+            updateHUD();
+
+            if (state.wantedStars > prev) {
+                sfx.playSirenBlip();
+                const angle = Math.random() * Math.PI * 2;
+                const sx = player.pos.x + Math.sin(angle) * 42;
+                const sz = player.pos.z + Math.cos(angle) * 42;
+                spawnVehicle('police', sx, sz, angle + Math.PI, true);
+
+                for (let i = 0; i < 2; i++) {
+                    spawnHumanEntity({
+                        x: sx + (i * 2.5),
+                        z: sz + 2,
+                        role: 'police',
+                        shirtColor: 0xd97706,
+                        jacketColor: 0x1e3a8a
+                    });
+                }
+                showDialogue('Coimbatore City Police Control', `Wanted Level ${state.wantedStars}★! All TN-38 Patrol Units intercept immediately!`, 'fa-shield-halved');
+            }
+        }
+
+        /***********************************************************************
+         * 10. GTA CHEAT CODE ENGINE (KEYBOARD TYPING + SMARTPHONE APP)
+         ***********************************************************************/
+        function toggleSmartphone() {
+            const drawer = document.getElementById('smartphone-drawer');
+            drawer.classList.toggle('hidden');
+            drawer.classList.toggle('flex');
+        }
+
+        function submitCheatBox() {
+            const box = document.getElementById('cheat-input-box');
+            if (!box || !box.value.trim()) return;
+            activateCheat(box.value.trim().toUpperCase());
+            box.value = '';
+        }
+
+        function activateCheat(rawCode) {
+            const code = rawCode.trim().toUpperCase();
+            sfx.playCheatBeep();
+
+            switch (code) {
+                case 'WEBNOXKING': {
+                    state.cash += 100000000; // +₹10 Crore
+                    state.health = 100;
+                    state.armor = 100;
+                    const sx = player.pos.x + Math.sin(player.rotY) * 5.5;
+                    const sz = player.pos.z + Math.cos(player.rotY) * 5.5;
+                    spawnVehicle('gtr', sx, sz, player.rotY);
+                    showCheatToast('WEBNOXKING', '+₹10 Crore Cash & Webnox Founder V10 Supercar Spawned!');
+                    break;
+                }
+                case 'HESOYAM':
+                    state.health = 100;
+                    state.armor = 100;
+                    state.cash += 250000;
+                    if (player.inVehicle) player.inVehicle.health = 1000;
+                    showCheatToast('HESOYAM', 'Full Health, 100% Armor & +₹2,50,000 Cash!');
+                    break;
+                case 'BAGUVIX':
+                    state.godMode = !state.godMode;
+                    state.health = 100;
+                    showCheatToast('BAGUVIX', `God Mode Invincibility: ${state.godMode ? 'ON' : 'OFF'}`);
+                    break;
+                case 'UZUMYMW':
+                case 'PROFESSIONALTOOLS':
+                    WEAPONS_ARSENAL.forEach(w => { if (w.ammo !== '∞') w.ammo = 9999; });
+                    state.infiniteAmmo = true;
+                    selectWeaponIndex(5);
+                    showCheatToast('UZUMYMW', 'All Heavy Weapons + RPG-7 Unlocked!');
+                    break;
+                case 'FULLCLIP':
+                    state.infiniteAmmo = !state.infiniteAmmo;
+                    selectWeaponIndex(state.weaponIdx);
+                    showCheatToast('FULLCLIP', `Infinite Ammo: ${state.infiniteAmmo ? 'ON' : 'OFF'}`);
+                    break;
+                case 'PANZER': {
+                    const sx = player.pos.x + Math.sin(player.rotY) * 6.5;
+                    const sz = player.pos.z + Math.cos(player.rotY) * 6.5;
+                    spawnVehicle('tank', sx, sz, player.rotY);
+                    showCheatToast('PANZER', 'Rhino M1A2 Battle Tank Dropped!');
+                    break;
+                }
+                case 'COMET': {
+                    const sx = player.pos.x + Math.sin(player.rotY) * 5.5;
+                    const sz = player.pos.z + Math.cos(player.rotY) * 5.5;
+                    spawnVehicle('gtr', sx, sz, player.rotY);
+                    showCheatToast('COMET', 'Webnox Founder V10 Supercar Spawned!');
+                    break;
+                }
+                case 'BULLET': {
+                    const sx = player.pos.x + Math.sin(player.rotY) * 4.5;
+                    const sz = player.pos.z + Math.cos(player.rotY) * 4.5;
+                    spawnVehicle('bullet', sx, sz, player.rotY);
+                    showCheatToast('BULLET', 'Royal Classic 350 Chrome Spawned!');
+                    break;
+                }
+                case 'ROCKETMAN':
+                    state.jetpackEquipped = !state.jetpackEquipped;
+                    if (jetpackMesh) jetpackMesh.visible = state.jetpackEquipped;
+                    showCheatToast('ROCKETMAN', `Thruster Jetpack: ${state.jetpackEquipped ? 'EQUIPPED (Hold SPACE)' : 'REMOVED'}`);
+                    break;
+                case 'LAWYERUP':
+                case 'ASNAEB':
+                case 'AEZAKMI':
+                    state.wantedStars = 0;
+                    allHumans.forEach(h => { if (h.role === 'police') h.role = 'civilian'; });
+                    showCheatToast('LAWYERUP', 'Wanted Level Cleared (0★)!');
+                    break;
+                case 'BRINGITON':
+                    escalateWantedLevel(5);
+                    showCheatToast('BRINGITON', '5-Star Wanted Level Activated!');
+                    break;
+                case 'KANGAROO':
+                    state.superJump = !state.superJump;
+                    showCheatToast('KANGAROO', `Mega Jump & Speed Boost: ${state.superJump ? 'ON' : 'OFF'}`);
+                    break;
+                case 'SLOWMO':
+                    state.slowMo = !state.slowMo;
+                    showCheatToast('SLOWMO', `Cinematic Bullet-Time: ${state.slowMo ? 'ON' : 'OFF'}`);
+                    break;
+                default:
+                    showCheatToast(code, 'Unknown Cheat Code');
+                    return;
+            }
+            updateHUD();
+        }
+
+        let cheatToastTimer;
+        function showCheatToast(code, desc) {
+            const el = document.getElementById('cheat-toast');
+            document.getElementById('cheat-toast-text').textContent = `${code}: ${desc}`;
+            el.classList.remove('hidden');
+            el.classList.add('flex');
+            clearTimeout(cheatToastTimer);
+            cheatToastTimer = setTimeout(() => {
+                el.classList.add('hidden');
+                el.classList.remove('flex');
+            }, 3800);
+        }
+
+        /***********************************************************************
+         * 10B. WEBNOX TECHNOLOGIES HQ CEO MANAGEMENT SYSTEM
+         ***********************************************************************/
+        function renderWebnoxDashboard() {
+            let totalRate = 15000;
+            let totalEng = 25;
+            WEBNOX_DIVISIONS.forEach(d => {
+                totalRate += d.level * d.incomeBoost;
+                totalEng += d.level * d.headcount;
+            });
+            state.passiveIncomePerSec = totalRate;
+
+            const rateEl = document.getElementById('webnox-income-rate');
+            const teamEl = document.getElementById('webnox-team-count');
+            if (rateEl) rateEl.textContent = `+₹${totalRate.toLocaleString('en-IN')} / sec`;
+            if (teamEl) teamEl.textContent = `${totalEng} Engineers`;
+
+            const list = document.getElementById('webnox-divisions-list');
+            if (!list) return;
+            list.innerHTML = WEBNOX_DIVISIONS.map(d => {
+                const cost = Math.round(d.baseCost * Math.pow(1.45, d.level));
+                const canAfford = state.cash >= cost;
+                return `
+                <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold uppercase text-cyan-400">Division Lv.${d.level}</span>
+                            <span class="text-[11px] font-bold text-emerald-400">+₹${d.incomeBoost.toLocaleString('en-IN')}/s</span>
+                        </div>
+                        <h4 class="font-display font-extrabold text-sm text-white mt-0.5">${d.name}</h4>
+                        <p class="text-[11px] text-slate-400 mt-1">${d.desc}</p>
+                    </div>
+                    <button onclick="upgradeWebnoxDivision('${d.id}')" ${!canAfford ? 'disabled' : ''} class="btn-action mt-3 w-full py-2 rounded-xl font-extrabold text-xs ${canAfford ? 'bg-cyan-400 hover:bg-cyan-300 text-slate-950' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}">
+                        Expand Division (₹${cost.toLocaleString('en-IN')})
+                    </button>
+                </div>`;
+            }).join('');
+        }
+
+        function upgradeWebnoxDivision(divId) {
+            const d = WEBNOX_DIVISIONS.find(x => x.id === divId);
+            if (!d) return;
+            const cost = Math.round(d.baseCost * Math.pow(1.45, d.level));
+            if (state.cash < cost) return;
+            state.cash -= cost;
+            d.level++;
+            sfx.playCheatBeep();
+            renderWebnoxDashboard();
+            updateHUD();
+            showDialogue('Webnox Technologies HQ', `Upgraded ${d.name} to Lv.${d.level}! Passive IT revenue increased!`, 'fa-laptop-code');
+        }
+
+        function teleportToWebnoxHQ() {
+            closeModal('webnoxModal');
+            player.pos.set(-38, 0, -28);
+            player.rotY = Math.PI;
+            if (player.inVehicle) player.inVehicle.mesh.position.copy(player.pos);
+            showDialogue('Webnox Technologies HQ', 'Arrived at No. 721/2, Venky Complex, 2nd Floor, Cross Cut Road, Seth Narang Das Layout!', 'fa-building-user');
+        }
+
+        /***********************************************************************
+         * 11. OPEN-WORLD BATTLEGROUND SURVIVAL MODE (SHRINKING ZONE & AIRDROPS)
+         ***********************************************************************/
+        function toggleBattlegroundMode() {
+            state.battlegroundActive = !state.battlegroundActive;
+            const hud = document.getElementById('battleground-hud');
+            const btn = document.getElementById('btn-bg-mode');
+
+            if (state.battlegroundActive) {
+                state.bgZoneRadius = 360;
+                state.bgKills = 0;
+                empZoneCylinder.visible = true;
+                hud.classList.remove('hidden');
+                hud.classList.add('flex');
+                btn.className = 'btn-action bg-rose-600 text-white px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-lg';
+
+                for (let i = 0; i < 15; i++) {
+                    const ang = (i / 15) * Math.PI * 2;
+                    const dist = 35 + Math.random() * 140;
+                    spawnHumanEntity({
+                        x: player.pos.x + Math.sin(ang) * dist,
+                        z: player.pos.z + Math.cos(ang) * dist,
+                        role: 'mercenary',
+                        shirtColor: 0x991b1b,
+                        jacketColor: 0x18181b
+                    });
+                }
+
+                for (let c = 0; c < 4; c++) {
+                    const crate = new THREE.Mesh(
+                        new THREE.BoxGeometry(2.2, 2.2, 2.2),
+                        new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 })
+                    );
+                    crate.position.set(player.pos.x + (Math.random() - 0.5) * 160, 1.1, player.pos.z + (Math.random() - 0.5) * 160);
+                    scene.add(crate);
+                    supplyCrates.push(crate);
+                }
+
+                updateBattlegroundHUD();
+                showDialogue('KOVAI BATTLEGROUND', 'Battleground Survival Mode Active! Eliminate the 15 Mercenaries and stay inside the red EMP Zone!', 'fa-parachute-box');
+            } else {
+                empZoneCylinder.visible = false;
+                hud.classList.add('hidden');
+                hud.classList.remove('flex');
+                btn.className = 'btn-action hud-glass hover:bg-rose-950/80 px-3 py-1.5 rounded-xl text-xs font-extrabold text-rose-400 border border-rose-500/40 flex items-center gap-1.5 shadow-lg';
+                allHumans.forEach(h => { if (h.role === 'mercenary') h.role = 'civilian'; });
+            }
+        }
+
+        function updateBattlegroundHUD() {
+            const aliveMercs = allHumans.filter(h => h.role === 'mercenary' && !h.dead).length;
+            document.getElementById('bg-alive-count').textContent = aliveMercs + 1;
+            document.getElementById('bg-kill-count').textContent = state.bgKills;
+            document.getElementById('bg-zone-radius').textContent = `${Math.round(state.bgZoneRadius)}m`;
+
+            if (state.battlegroundActive && aliveMercs === 0 && state.bgKills > 0) {
+                state.cash += 1000000;
+                sfx.playCheatBeep();
+                showCheatToast('WINNER WINNER KOVAI DINNER!', '+₹10,00,000 Battleground Championship Prize!');
+                toggleBattlegroundMode();
+            }
+        }
+
+        /***********************************************************************
+         * 12. REAL-TIME VEHICLE HIJACKING & DRIVING SYSTEM
+         ***********************************************************************/
+        function hijackOrEnterExitVehicle() {
+            if (player.inVehicle) {
+                const v = player.inVehicle;
+                player.pos.copy(v.mesh.position).add(new THREE.Vector3(2.6, 0, 0));
+                player.inVehicle = null;
+                playerHuman.visible = true;
+                document.getElementById('vehicle-hud').classList.add('hidden');
+                document.getElementById('btn-hijack-label').textContent = 'HIJACK / DRIVE [F]';
+                return;
+            }
+
+            let nearest = null;
+            let bestDist = 11.5;
+            allVehicles.forEach(v => {
+                const d = v.mesh.position.distanceTo(player.pos);
+                if (d < bestDist) {
+                    bestDist = d;
+                    nearest = v;
+                }
+            });
+
+            if (!nearest) {
+                showDialogue('No Vehicle Nearby', 'Walk closer to any car, bike, TNSTC bus or open Cheat Phone [P] to spawn one!', 'fa-car');
+                return;
+            }
+
+            if (nearest.isAI) {
+                nearest.isAI = false;
+                spawnHumanEntity({
+                    x: nearest.mesh.position.x - 2.4,
+                    z: nearest.mesh.position.z,
+                    role: nearest.isPolice ? 'police' : 'civilian',
+                    shirtColor: 0xf43f5e
+                });
+                if (nearest.isPolice) escalateWantedLevel(1);
+            }
+
+            player.inVehicle = nearest;
+            player.pos.copy(nearest.mesh.position);
+            player.rotY = nearest.mesh.rotation.y;
+            playerHuman.visible = false;
+
+            document.getElementById('vehicle-hud').classList.remove('hidden');
+            document.getElementById('hud-veh-name').textContent = nearest.spec.name;
+            document.getElementById('btn-hijack-label').textContent = 'EXIT VEHICLE [F]';
+            sfx.playCheatBeep();
+        }
+
+        function triggerHornOrSiren() {
+            sfx.playSirenBlip();
+        }
+
+        /***********************************************************************
+         * 13. HUD, RADAR MAP & MODAL CONTROLLERS
+         ***********************************************************************/
+        function updateHUD() {
+            document.getElementById('hud-cash').textContent = '₹' + state.cash.toLocaleString('en-IN');
+            document.getElementById('hud-health-bar').style.width = `${state.health}%`;
+            document.getElementById('hud-armor-bar').style.width = `${state.armor}%`;
+            document.getElementById('hud-stamina-bar').style.width = `${state.stamina}%`;
+
+            const starsEl = document.getElementById('wanted-stars-container');
+            let sHtml = '';
+            for (let i = 1; i <= 5; i++) {
+                if (i <= state.wantedStars) {
+                    sHtml += `<i class="fa-solid fa-star wanted-active"></i>`;
+                } else {
+                    sHtml += `<i class="fa-solid fa-star text-slate-700"></i>`;
+                }
+            }
+            starsEl.innerHTML = sHtml;
+
+            const strip = document.getElementById('active-cheats-strip');
+            let pills = '';
+            if (state.godMode) pills += `<span class="bg-amber-500/20 border border-amber-400 text-amber-300 text-[9px] font-extrabold px-2 py-0.5 rounded-full">GOD MODE</span>`;
+            if (state.infiniteAmmo) pills += `<span class="bg-purple-500/20 border border-purple-400 text-purple-300 text-[9px] font-extrabold px-2 py-0.5 rounded-full">INF AMMO</span>`;
+            if (state.jetpackEquipped) pills += `<span class="bg-cyan-500/20 border border-cyan-400 text-cyan-300 text-[9px] font-extrabold px-2 py-0.5 rounded-full">JETPACK</span>`;
+            if (state.superJump) pills += `<span class="bg-pink-500/20 border border-pink-400 text-pink-300 text-[9px] font-extrabold px-2 py-0.5 rounded-full">MEGA JUMP</span>`;
+            strip.innerHTML = pills;
+        }
+
+        let dlgTimeout;
+        function showDialogue(speaker, text, icon = 'fa-walkie-talkie') {
+            const b = document.getElementById('dialogue-banner');
+            document.getElementById('dlg-speaker').textContent = speaker;
+            document.getElementById('dlg-text').textContent = text;
+            document.getElementById('dlg-icon').className = `fa-solid ${icon}`;
+            b.classList.remove('hidden');
+            b.classList.add('flex');
+            clearTimeout(dlgTimeout);
+            dlgTimeout = setTimeout(() => {
+                b.classList.add('hidden');
+                b.classList.remove('flex');
+            }, 4500);
+        }
+
+        let currentMapStyle = 'street';
+        function setMapStyle(style) {
+            currentMapStyle = style;
+            document.getElementById('btn-map-street').className = style === 'street'
+                ? 'px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs'
+                : 'px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs';
+            document.getElementById('btn-map-sat').className = style === 'satellite'
+                ? 'px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs'
+                : 'px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs';
+            const fc = document.getElementById('fullmap-canvas');
+            if (fc) drawRadarMap(fc.getContext('2d'), fc.width, fc.height, true);
+        }
+
+        function drawRadarMap(ctx, w, h, isFullMap = false) {
+            const isStreet = isFullMap && currentMapStyle === 'street';
+            ctx.fillStyle = isStreet ? '#f1f5f9' : '#09111e';
+            ctx.fillRect(0, 0, w, h);
+
+            const cx = w / 2;
+            const cy = h / 2;
+            const scale = isFullMap ? 0.65 : 0.34;
+            const refX = isFullMap ? 0 : player.pos.x;
+            const refZ = isFullMap ? 0 : player.pos.z;
+
+            function toScreen(wx, wz) {
+                return [(wx - refX) * scale + cx, (wz - refZ) * scale + cy];
+            }
+
+            // Draw Ukkadam Valankulam Lake & Western Ghats Forest on Map
+            const [ukx, uky] = toScreen(-65, 275);
+            ctx.fillStyle = isStreet ? '#38bdf8' : '#0284c7';
+            ctx.fillRect(ukx - 45 * scale, uky - 25 * scale, 95 * scale, 50 * scale);
+
+            const [mwx, mwy] = toScreen(-350, -250);
+            ctx.fillStyle = isStreet ? '#bbf7d0' : '#064e3b';
+            ctx.beginPath();
+            ctx.arc(mwx, mwy, 75 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            const roads = [
+                { coords: [-260, 30, 380, 30], label: 'Avinashi Rd (NH-544)', isHighway: true },
+                { coords: [-250, 0, 280, 0], label: '100 Feet Rd / Gandhipuram', isHighway: false },
+                { coords: [-35, -240, -35, 280], label: 'Cross Cut Rd (SH-164)', isHighway: true },
+                { coords: [80, -260, 80, 180], label: 'Sathy Rd (NH-948)', isHighway: true },
+                { coords: [-165, -260, -165, 200], label: 'Mettupalayam Rd / D.B. Rd', isHighway: false },
+                { coords: [235, -80, 235, 240], label: 'Villankurichi / TIDEL Park Rd', isHighway: false },
+                { coords: [-180, 195, 280, 195], label: 'Trichy Rd / Town Hall Bypass', isHighway: false }
+            ];
+            roads.forEach(r => {
+                const [x1, z1, x2, z2] = r.coords;
+                const [sx1, sy1] = toScreen(x1, z1);
+                const [sx2, sy2] = toScreen(x2, z2);
+                ctx.strokeStyle = isStreet
+                    ? (r.isHighway ? '#f59e0b' : '#cbd5e1')
+                    : (r.isHighway ? '#d97706' : '#334155');
+                ctx.lineWidth = isFullMap ? (r.isHighway ? 8 : 5) : 4;
+                ctx.beginPath();
+                ctx.moveTo(sx1, sy1);
+                ctx.lineTo(sx2, sy2);
+                ctx.stroke();
+
+                if (isFullMap) {
+                    ctx.fillStyle = isStreet ? '#475569' : '#94a3b8';
+                    ctx.font = 'bold 9px Plus Jakarta Sans';
+                    ctx.fillText(r.label, (sx1 + sx2) / 2 + 6, (sy1 + sy2) / 2 - 5);
+                }
+            });
+
+            if (state.battlegroundActive) {
+                const [zx, zy] = toScreen(0, 0);
+                ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(zx, zy, state.bgZoneRadius * scale, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            if (state.gpsTarget) {
+                const [px, py] = toScreen(player.pos.x, player.pos.z);
+                const [tx, ty] = toScreen(state.gpsTarget.x, state.gpsTarget.z);
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([5, 4]);
+                ctx.beginPath();
+                ctx.moveTo(px, py);
+                ctx.lineTo(tx, ty);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            allHumans.forEach(h => {
+                if (h.dead || h.role === 'civilian') return;
+                const [hx, hy] = toScreen(h.mesh.position.x, h.mesh.position.z);
+                ctx.fillStyle = h.role === 'police' ? '#3b82f6' : '#ef4444';
+                ctx.beginPath();
+                ctx.arc(hx, hy, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            KOVAI_LANDMARKS.forEach(lm => {
+                const [lx, ly] = toScreen(lm.x, lm.z);
+                ctx.fillStyle = lm.color;
+                ctx.beginPath();
+                ctx.arc(lx, ly, isFullMap ? 5.5 : 3.5, 0, Math.PI * 2);
+                ctx.fill();
+                if (isFullMap) {
+                    ctx.fillStyle = isStreet ? '#0f172a' : '#e2e8f0';
+                    ctx.font = 'bold 10px Plus Jakarta Sans';
+                    ctx.fillText(lm.name.split('(')[0].trim(), lx + 8, ly + 3);
+                }
+            });
+
+            const [px, py] = toScreen(player.pos.x, player.pos.z);
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.arc(px, py, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function toggleFullMap() {
+            const m = document.getElementById('mapModal');
+            if (m.classList.contains('hidden')) openModal('mapModal');
+            else closeModal('mapModal');
+        }
+
+        function openModal(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove('hidden');
+            el.classList.add('flex');
+
+            if (id === 'webnoxModal') {
+                renderWebnoxDashboard();
+            } else if (id === 'mapModal') {
+                const list = document.getElementById('landmark-directory-list');
+                list.innerHTML = KOVAI_LANDMARKS.map(lm => `
+                    <div class="bg-slate-950 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-3 flex flex-col gap-1.5 transition">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="font-extrabold text-xs text-white flex items-center gap-1.5">
+                                    <i class="fa-solid ${lm.icon}" style="color:${lm.color}"></i>
+                                    <span>${lm.name}</span>
+                                </div>
+                                <div class="text-[10px] font-bold text-amber-400 mt-0.5">${lm.tamil}</div>
+                            </div>
+                            <span class="bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded text-[9px] font-extrabold shrink-0">${lm.rating}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-300 leading-snug">${lm.address}</div>
+                        <div class="flex items-center justify-between pt-1 border-t border-slate-800/80 mt-0.5">
+                            <span class="font-mono text-[9px] text-cyan-400">${lm.lat}°N, ${lm.lng}°E</span>
+                            <div class="flex gap-1.5">
+                                <button onclick="setGPSWaypoint(${lm.x}, ${lm.z}, '${lm.name.replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[10px] font-bold">Directions</button>
+                                <button onclick="fastTravelTo(${lm.x}, ${lm.z}, '${lm.name.replace(/'/g, "\\'")}')" class="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[10px] font-extrabold">Fast Travel</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                const fc = document.getElementById('fullmap-canvas');
+                drawRadarMap(fc.getContext('2d'), fc.width, fc.height, true);
+            } else if (id === 'garageModal') {
+                const g = document.getElementById('garage-vehicles-grid');
+                g.innerHTML = VEHICLE_CATALOG.map(v => `
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+                        <div>
+                            <span class="text-[10px] font-extrabold uppercase text-cyan-400">${v.category}</span>
+                            <h3 class="font-display font-extrabold text-base text-white mt-0.5">${v.name}</h3>
+                            <p class="text-xs text-slate-400 mt-1">${v.desc}</p>
+                        </div>
+                        <button onclick="spawnGarageVehicle('${v.id}')" class="btn-action mt-3 w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-extrabold text-xs">
+                            Drop Vehicle Here (FREE)
+                        </button>
+                    </div>
+                `).join('');
+            } else if (id === 'missionsModal') {
+                const mc = document.getElementById('missions-list-container');
+                mc.innerHTML = KOVAI_MISSIONS.map(m => `
+                    <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-xs font-extrabold text-emerald-400">REWARD: ₹${m.reward.toLocaleString('en-IN')}</div>
+                            <h3 class="font-display font-extrabold text-base text-white mt-0.5">${m.title}</h3>
+                            <p class="text-xs text-slate-400 mt-1">${m.desc}</p>
+                        </div>
+                        <button onclick="startMission('${m.id}')" class="btn-action px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs shrink-0">
+                            Launch
+                        </button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.add('hidden');
+            el.classList.remove('flex');
+        }
+
+        function setGPSWaypoint(x, z, name) {
+            state.gpsTarget = { x, z, name };
+            closeModal('mapModal');
+            showDialogue('GPS Waypoint Set', `Routing to ${name}`, 'fa-route');
+        }
+
+        function fastTravelTo(x, z, name) {
+            player.pos.set(x, getGroundHeightAt(x, z), z);
+            if (player.inVehicle) player.inVehicle.mesh.position.copy(player.pos);
+            state.gpsTarget = { x, z, name };
+            closeModal('mapModal');
+            showDialogue('Fast Travel Complete', `Arrived at ${name}`, 'fa-location-dot');
+        }
+
+        function spawnGarageVehicle(typeId) {
+            closeModal('garageModal');
+            const sx = player.pos.x + Math.sin(player.rotY) * 5.5;
+            const sz = player.pos.z + Math.cos(player.rotY) * 5.5;
+            spawnVehicle(typeId, sx, sz, player.rotY);
+            sfx.playCheatBeep();
+            showDialogue('Kovai Customs Garage', 'Vehicle delivered right in front of you! Press [F] to drive.', 'fa-car-Burst');
+        }
+
+        function startMission(mId) {
+            const m = KOVAI_MISSIONS.find(x => x.id === mId);
+            if (!m) return;
+            state.activeMission = m;
+            state.gpsTarget = { x: m.x, z: m.z, name: m.title };
+            closeModal('missionsModal');
+            showDialogue('Contract Started', m.desc, 'fa-briefcase');
+        }
+
+        function cycleTimeAndWeather() {
+            state.timePreset = (state.timePreset + 1) % 3;
+            const badge = document.getElementById('hud-time-badge');
+            if (state.timePreset === 0) {
+                scene.background.setHex(0x1e293b);
+                scene.fog.color.setHex(0x1e293b);
+                sunLight.intensity = 1.35;
+                badge.innerHTML = `<i class="fa-solid fa-sun text-amber-400 mr-1"></i>16:45 IST`;
+            } else if (state.timePreset === 1) {
+                scene.background.setHex(0x050811);
+                scene.fog.color.setHex(0x050811);
+                sunLight.intensity = 0.35;
+                badge.innerHTML = `<i class="fa-solid fa-moon text-indigo-400 mr-1"></i>23:15 NIGHT`;
+            } else {
+                scene.background.setHex(0x0f172a);
+                scene.fog.color.setHex(0x0f172a);
+                sunLight.intensity = 0.65;
+                badge.innerHTML = `<i class="fa-solid fa-cloud-showers-heavy text-cyan-400 mr-1"></i>MONSOON`;
+            }
+        }
+
+        /***********************************************************************
+         * 14. INPUT LISTENERS (WASD, MOUSE AIM/SHOOT, KEYBOARD CHEAT BUFFER)
+         ***********************************************************************/
+        window.addEventListener('keydown', (e) => {
+            if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+                if (e.key === 'Enter') submitCheatBox();
+                return;
+            }
+
+            const k = e.key.toLowerCase();
+            if (k === 'w' || e.key === 'ArrowUp') keys.w = true;
+            if (k === 's' || e.key === 'ArrowDown') keys.s = true;
+            if (k === 'a' || e.key === 'ArrowLeft') keys.a = true;
+            if (k === 'd' || e.key === 'ArrowRight') keys.d = true;
+            if (e.key === 'Shift') keys.shift = true;
+            if (e.key === ' ') keys.space = true;
+
+            if (k === 'f') hijackOrEnterExitVehicle();
+            if (k === 'q') cycleWeapon(1);
+            if (k === 'e') triggerFireWeapon();
+            if (k === 'h') openModal('webnoxModal');
+            if (k === 'p') toggleSmartphone();
+            if (k === 'b') toggleBattlegroundMode();
+            if (k === 'm') toggleFullMap();
+            if (k === 'g') openModal('garageModal');
+            if (k === 'j') openModal('missionsModal');
+
+            if (['1', '2', '3', '4', '5', '6'].includes(k)) {
+                selectWeaponIndex(parseInt(k) - 1);
+            }
+
+            // Classic GTA Keyboard Cheat Typing Buffer
+            if (/^[a-zA-Z]$/.test(e.key)) {
+                typedCheatBuffer = (typedCheatBuffer + e.key.toUpperCase()).slice(-18);
+                const knownCheats = ['WEBNOXKING', 'HESOYAM', 'BAGUVIX', 'UZUMYMW', 'PROFESSIONALTOOLS', 'FULLCLIP', 'PANZER', 'ROCKETMAN', 'COMET', 'BULLET', 'LAWYERUP', 'ASNAEB', 'AEZAKMI', 'BRINGITON', 'KANGAROO', 'SLOWMO'];
+                for (const code of knownCheats) {
+                    if (typedCheatBuffer.endsWith(code)) {
+                        activateCheat(code);
+                        typedCheatBuffer = '';
+                        break;
+                    }
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const k = e.key.toLowerCase();
+            if (k === 'w' || e.key === 'ArrowUp') keys.w = false;
+            if (k === 's' || e.key === 'ArrowDown') keys.s = false;
+            if (k === 'a' || e.key === 'ArrowLeft') keys.a = false;
+            if (k === 'd' || e.key === 'ArrowRight') keys.d = false;
+            if (e.key === 'Shift') keys.shift = false;
+            if (e.key === ' ') keys.space = false;
+        });
+
+        function setupMouseAndTouchControls() {
+            const container = document.getElementById('game-canvas-container');
+            let isPointerDown = false;
+            let lastX = 0, lastY = 0;
+
+            container.addEventListener('contextmenu', e => e.preventDefault());
+
+            container.addEventListener('pointerdown', (e) => {
+                isPointerDown = true;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                if (e.button === 2) {
+                    state.isAiming = true;
+                } else if (e.button === 0 && e.pointerType === 'mouse') {
+                    triggerFireWeapon();
+                }
+            });
+
+            window.addEventListener('pointermove', (e) => {
+                if (!isPointerDown) return;
+                const dx = e.clientX - lastX;
+                const dy = e.clientY - lastY;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                player.rotY -= dx * 0.0055;
+                player.pitch = Math.max(-0.35, Math.min(0.55, player.pitch + dy * 0.004));
+            });
+
+            window.addEventListener('pointerup', (e) => {
+                isPointerDown = false;
+                if (e.button === 2) state.isAiming = false;
+            });
+
+            // Virtual Touch Joystick
+            const zone = document.getElementById('joystick-zone');
+            const knob = document.getElementById('joystick-knob');
+            let joyActive = false;
+
+            zone.addEventListener('pointerdown', (e) => {
+                joyActive = true;
+                updateJoystick(e);
+            });
+            window.addEventListener('pointermove', (e) => {
+                if (joyActive) updateJoystick(e);
+            });
+            window.addEventListener('pointerup', () => {
+                joyActive = false;
+                joyInput.x = 0;
+                joyInput.y = 0;
+                knob.style.transform = 'translate(0px, 0px)';
+            });
+
+            function updateJoystick(e) {
+                const rect = zone.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                let dx = e.clientX - cx;
+                let dy = e.clientY - cy;
+                const maxR = rect.width * 0.36;
+                const dist = Math.hypot(dx, dy);
+                if (dist > maxR) {
+                    dx = (dx / dist) * maxR;
+                    dy = (dy / dist) * maxR;
+                }
+                knob.style.transform = `translate(${dx}px, ${dy}px)`;
+                joyInput.x = dx / maxR;
+                joyInput.y = -dy / maxR;
+            }
+        }
+
+        /***********************************************************************
+         * 15. MAIN 60FPS GTA GAME LOOP
+         ***********************************************************************/
+        let lastFrame = performance.now();
+        let radarTick = 0;
+
+        function animateGameLoop(now) {
+            requestAnimationFrame(animateGameLoop);
+            let dt = Math.min(0.05, (now - lastFrame) / 1000);
+            lastFrame = now;
+            if (state.slowMo) dt *= 0.4;
+
+            if (state.isFiring) triggerFireWeapon();
+
+            const throttle = (keys.w ? 1 : 0) - (keys.s ? 1 : 0) + joyInput.y;
+            const steer = (keys.a ? 1 : 0) - (keys.d ? 1 : 0) - joyInput.x;
+
+            // --- 1. PLAYER OR VEHICLE MOVEMENT ---
+            if (player.inVehicle) {
+                const v = player.inVehicle;
+                const spec = v.spec;
+                if (Math.abs(throttle) > 0.05) {
+                    v.speed += throttle * spec.accel * dt * (keys.shift ? 1.35 : 1);
+                } else {
+                    v.speed *= Math.pow(0.25, dt);
+                }
+                if (keys.space) v.speed *= Math.pow(0.03, dt);
+                v.speed = Math.max(-spec.maxSpeed * 0.4, Math.min(spec.maxSpeed, v.speed));
+
+                if (Math.abs(v.speed) > 0.6) {
+                    const dirSign = v.speed >= 0 ? 1 : -1;
+                    player.rotY += steer * spec.turn * dt * dirSign;
+                }
+
+                const nx = v.mesh.position.x + Math.sin(player.rotY) * v.speed * dt;
+                const nz = v.mesh.position.z + Math.cos(player.rotY) * v.speed * dt;
+                const gy = getGroundHeightAt(nx, nz);
+
+                v.mesh.position.set(nx, gy, nz);
+                v.mesh.rotation.y = player.rotY;
+                player.pos.copy(v.mesh.position);
+
+                const kmh = Math.round(Math.abs(v.speed) * 2.1);
+                document.getElementById('hud-speed-kmh').textContent = kmh;
+                document.getElementById('hud-rpm-bar').style.width = `${Math.min(100, (kmh / 180) * 100)}%`;
+
+                if (Math.abs(v.speed) > 18) {
+                    allHumans.forEach(h => {
+                        if (!h.dead && h.mesh.position.distanceTo(v.mesh.position) < 2.5) {
+                            const knock = h.mesh.position.clone().sub(v.mesh.position).normalize();
+                            damageHumanEntity(h, 120, knock);
+                        }
+                    });
+                }
+            } else {
+                const moveSpeed = (keys.shift ? 14 : 7.5) * (state.superJump ? 1.65 : 1);
+                player.rotY += steer * 2.6 * dt;
+                const walkVel = throttle * moveSpeed;
+
+                const nx = player.pos.x + Math.sin(player.rotY) * walkVel * dt;
+                const nz = player.pos.z + Math.cos(player.rotY) * walkVel * dt;
+                const groundY = getGroundHeightAt(nx, nz);
+
+                if (keys.space) {
+                    if (state.jetpackEquipped) {
+                        player.velY = 18;
+                        player.isGrounded = false;
+                    } else if (player.isGrounded) {
+                        player.velY = state.superJump ? 24 : 10.5;
+                        player.isGrounded = false;
+                    }
+                }
+
+                player.velY -= 26 * dt;
+                player.pos.x = nx;
+                player.pos.z = nz;
+                player.pos.y += player.velY * dt;
+
+                if (player.pos.y <= groundY) {
+                    player.pos.y = groundY;
+                    player.velY = 0;
+                    player.isGrounded = true;
+                }
+
+                playerHuman.position.copy(player.pos);
+                playerHuman.rotation.y = player.rotY;
+                animateHumanSkeleton(playerHuman, Math.abs(walkVel), state.isAiming || state.isFiring, dt);
+            }
+
+            // --- 2. UPDATE ROCKETS & EXPLOSIONS ---
+            for (let i = activeRockets.length - 1; i >= 0; i--) {
+                const r = activeRockets[i];
+                r.life -= dt;
+                r.mesh.position.addScaledVector(r.dir, r.speed * dt);
+                const gy = getGroundHeightAt(r.mesh.position.x, r.mesh.position.z);
+                if (r.mesh.position.y <= gy + 0.3 || r.life <= 0) {
+                    triggerExplosionAt(r.mesh.position.clone());
+                    scene.remove(r.mesh);
+                    activeRockets.splice(i, 1);
+                }
+            }
+
+            for (let i = explosionParticles.length - 1; i >= 0; i--) {
+                const ep = explosionParticles[i];
+                ep.life -= dt;
+                ep.mesh.position.addScaledVector(ep.vel, dt);
+                ep.mesh.scale.multiplyScalar(0.95);
+                if (ep.life <= 0) {
+                    scene.remove(ep.mesh);
+                    explosionParticles.splice(i, 1);
+                }
+            }
+
+            for (let i = bulletTracers.length - 1; i >= 0; i--) {
+                bulletTracers[i].life -= dt;
+                if (bulletTracers[i].life <= 0) {
+                    scene.remove(bulletTracers[i].line);
+                    bulletTracers.splice(i, 1);
+                }
+            }
+
+            // --- 3. UPDATE AI TRAFFIC & POLICE PURSUIT VEHICLES ---
+            allVehicles.forEach(v => {
+                if (!v.isAI || v === player.inVehicle) return;
+                if (v.isPolice && state.wantedStars > 0) {
+                    const toPlayer = player.pos.clone().sub(v.mesh.position);
+                    v.mesh.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+                    v.aiSpeed = 26;
+                }
+                v.mesh.position.x += Math.sin(v.mesh.rotation.y) * v.aiSpeed * dt;
+                v.mesh.position.z += Math.cos(v.mesh.rotation.y) * v.aiSpeed * dt;
+                v.mesh.position.y = getGroundHeightAt(v.mesh.position.x, v.mesh.position.z);
+                if (v.mesh.position.x > 360) v.mesh.position.x = -360;
+                if (v.mesh.position.x < -360) v.mesh.position.x = 360;
+                if (v.mesh.position.z > 320) v.mesh.position.z = -320;
+                if (v.mesh.position.z < -320) v.mesh.position.z = 320;
+            });
+
+            // --- 4. UPDATE HUMANS (CIVILIANS, POLICE & BATTLEGROUND MERCENARIES) ---
+            allHumans.forEach(h => {
+                if (h.dead) return;
+                const distToPlayer = h.mesh.position.distanceTo(player.pos);
+
+                if ((h.role === 'police' && state.wantedStars > 0) || (h.role === 'mercenary' && state.battlegroundActive)) {
+                    const toP = player.pos.clone().sub(h.mesh.position);
+                    h.rotY = Math.atan2(toP.x, toP.z);
+                    h.mesh.rotation.y = h.rotY;
+
+                    if (distToPlayer > 14) {
+                        h.mesh.position.x += Math.sin(h.rotY) * h.speed * dt;
+                        h.mesh.position.z += Math.cos(h.rotY) * h.speed * dt;
+                        animateHumanSkeleton(h.mesh, h.speed, true, dt);
+                    } else {
+                        animateHumanSkeleton(h.mesh, 0, true, dt);
+                    }
+
+                    if (distToPlayer < 48) {
+                        h.fireCooldown -= dt;
+                        if (h.fireCooldown <= 0) {
+                            h.fireCooldown = 1.1 + Math.random() * 0.8;
+                            const start = h.mesh.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+                            const end = player.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 1.2, (Math.random() - 0.5) * 1.5));
+                            spawnBulletTracer(start, end);
+                            if (Math.random() < 0.45) damagePlayer(6);
+                        }
+                    }
+                } else {
+                    h.mesh.position.x += Math.sin(h.rotY) * h.speed * dt;
+                    h.mesh.position.z += Math.cos(h.rotY) * h.speed * dt;
+                    h.mesh.rotation.y = h.rotY;
+                    if (Math.random() < 0.01) h.rotY += (Math.random() - 0.5) * 1.2;
+                    animateHumanSkeleton(h.mesh, h.speed, false, dt);
+                }
+                h.mesh.position.y = getGroundHeightAt(h.mesh.position.x, h.mesh.position.z);
+            });
+
+            // --- 5. BATTLEGROUND SHRINKING ZONE & SUPPLY CRATES ---
+            if (state.battlegroundActive) {
+                state.bgZoneRadius = Math.max(45, state.bgZoneRadius - 3.5 * dt);
+                const scaleR = state.bgZoneRadius / 380;
+                empZoneCylinder.scale.set(scaleR, 1, scaleR);
+
+                if (Math.hypot(player.pos.x, player.pos.z) > state.bgZoneRadius) {
+                    damagePlayer(8 * dt);
+                }
+
+                for (let i = supplyCrates.length - 1; i >= 0; i--) {
+                    if (supplyCrates[i].position.distanceTo(player.pos) < 4.0) {
+                        state.health = 100;
+                        state.armor = 100;
+                        state.infiniteAmmo = true;
+                        selectWeaponIndex(5);
+                        scene.remove(supplyCrates[i]);
+                        supplyCrates.splice(i, 1);
+                        sfx.playCheatBeep();
+                        showCheatToast('AIRDROP LOOTED!', 'Full Armor + RPG-7 Rocket Launcher Equipped!');
+                    }
+                }
+            }
+
+            // --- 6. ACTIVE MISSION CHECK ---
+            if (state.activeMission) {
+                const d = Math.hypot(player.pos.x - state.activeMission.x, player.pos.z - state.activeMission.z);
+                if (d < 16) {
+                    state.cash += state.activeMission.reward;
+                    sfx.playCheatBeep();
+                    showCheatToast('CONTRACT COMPLETED!', `+₹${state.activeMission.reward.toLocaleString('en-IN')} Earned!`);
+                    state.activeMission = null;
+                    updateHUD();
+                }
+            }
+
+            // --- 7. THIRD-PERSON OVER-THE-SHOULDER GTA CAMERA ---
+            const isDriving = Boolean(player.inVehicle);
+            const camDist = state.isAiming ? 4.2 : (isDriving ? 12.5 : 6.8);
+            const camHeight = state.isAiming ? 2.1 : (isDriving ? 4.4 : 2.6);
+            const shoulderOffset = state.isAiming ? 0.85 : 0.45;
+
+            const desiredCamPos = new THREE.Vector3(
+                player.pos.x - Math.sin(player.rotY) * camDist + Math.cos(player.rotY) * shoulderOffset,
+                player.pos.y + camHeight + player.pitch * 4,
+                player.pos.z - Math.cos(player.rotY) * camDist - Math.sin(player.rotY) * shoulderOffset
+            );
+            camera.position.lerp(desiredCamPos, 0.22);
+
+            const lookTarget = new THREE.Vector3(
+                player.pos.x + Math.sin(player.rotY) * 18,
+                player.pos.y + 1.5 - player.pitch * 8,
+                player.pos.z + Math.cos(player.rotY) * 18
+            );
+            camera.lookAt(lookTarget);
+
+            // --- 8. RADAR MINIMAP REFRESH & WEBNOX PASSIVE INCOME ---
+            radarTick += dt;
+            if (radarTick > 0.2) {
+                state.cash += Math.round(state.passiveIncomePerSec * radarTick);
+                radarTick = 0;
+                updateHUD();
+
+                const mm = document.getElementById('minimap-canvas');
+                if (mm) drawRadarMap(mm.getContext('2d'), 190, 150, false);
+
+                const distToWebnox = Math.hypot(player.pos.x - (-38), player.pos.z - (-32));
+                const hqPrompt = document.getElementById('hq-proximity-prompt');
+                if (hqPrompt) {
+                    if (distToWebnox < 18) {
+                        hqPrompt.classList.remove('hidden');
+                        hqPrompt.classList.add('flex');
+                    } else {
+                        hqPrompt.classList.add('hidden');
+                        hqPrompt.classList.remove('flex');
+                    }
+                }
+
+                if (webnoxMarkerRing) {
+                    webnoxMarkerRing.rotation.y += 0.08;
+                }
+
+                let nearLM = KOVAI_LANDMARKS[0];
+                let minD = 9999;
+                KOVAI_LANDMARKS.forEach(lm => {
+                    const d = Math.hypot(player.pos.x - lm.x, player.pos.z - lm.z);
+                    if (d < minD) { minD = d; nearLM = lm; }
+                });
+                document.getElementById('hud-district-name').textContent = `${nearLM.name} (${nearLM.pincode})`;
+                document.getElementById('hud-tamil-sub').textContent = nearLM.tamil;
+
+                const gps = worldToLatLng(player.pos.x, player.pos.z);
+                const coordEl = document.getElementById('hud-latlng-badge');
+                if (coordEl) coordEl.textContent = `${gps.lat}°N, ${gps.lng}°E`;
+                const fullCoordEl = document.getElementById('fullmap-live-coords');
+                if (fullCoordEl) fullCoordEl.textContent = `${gps.lat}° N, ${gps.lng}° E • Near ${nearLM.name} (${nearLM.pincode})`;
+
+                if (state.gpsTarget) {
+                    document.getElementById('hud-gps-dist').textContent = `${Math.round(Math.hypot(player.pos.x - state.gpsTarget.x, player.pos.z - state.gpsTarget.z))}m`;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            if (!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = function () {
+            initRealisticWorld();
+            setupMouseAndTouchControls();
+            selectWeaponIndex(3);
+            renderWebnoxDashboard();
+            updateHUD();
+
+            setTimeout(() => {
+                showDialogue(
+                    'WEBNOX TECHNOLOGIES • CROSS CUT ROAD HQ',
+                    'You are outside Venky Complex (2nd Floor, Seth Narang Das Layout). Press [H] for Webnox CEO Suite, [F] to drive your Founder V10 Supercar, or type WEBNOXKING!',
+                    'fa-laptop-code'
+                );
+            }, 500);
+
+            requestAnimationFrame(animateGameLoop);
+        };
+    </script>
+</body>
+</html>
