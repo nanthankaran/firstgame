@@ -149,7 +149,7 @@
                     <div class="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-cyan-400">
                         <i class="fa-solid fa-location-dot"></i>
                         <span id="hud-district-name">Webnox Technologies HQ</span>
-                        <span id="hud-perf-badge" class="ml-1 bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded text-[8px] border border-emerald-500/30">60 FPS • UE5 PBR</span>
+                        <span id="hud-perf-badge" class="ml-1 bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded text-[8px] border border-emerald-500/30">60 FPS • PHYSICS v2</span>
                     </div>
                     <div id="hud-tamil-sub" class="text-[11px] font-bold text-slate-200 mt-0.5">வெப்நாக்ஸ் டெக்னாலஜிஸ் • ஸ்ரீ வெங்கி காம்ப்ளக்ஸ்</div>
                     <div class="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
@@ -159,6 +159,12 @@
                         <span>•</span>
                         <span id="hud-gps-dist" class="text-emerald-400 font-bold">20m</span>
                     </div>
+                </div>
+
+                <!-- Live Stunt / Drift / Destruction Combo Ticker -->
+                <div id="stunt-combo-banner" class="hidden hud-glass border-l-4 border-emerald-400 px-3 py-1.5 rounded-xl shadow-xl">
+                    <div id="stunt-combo-title" class="text-[10px] font-black uppercase tracking-widest text-emerald-400">DRIFT COMBO</div>
+                    <div id="stunt-combo-val" class="text-xs font-extrabold text-white">+₹5,000</div>
                 </div>
 
                 <!-- Active God Mode / Cheat Pills -->
@@ -1168,7 +1174,10 @@
         const activeParticles = [];
         const supplyCrates = [];
         const buildingColliders = [];
+        const destructibleProps = [];
+        const stuntRamps = [];
         const gpsChevronMeshes = [];
+        let cameraShakeIntensity = 0;
 
         /***********************************************************************
          * 4. PROCEDURAL HIGH-RES PBR TEXTURE GENERATORS
@@ -1809,7 +1818,11 @@
             webnoxMarkerRing.position.set(0, 0.35, 14);
             webnoxGroup.add(webnoxMarkerRing);
             scene.add(webnoxGroup);
-            buildingColliders.push({ x: -38, z: -48, r: 12 });
+            buildingColliders.push({
+                x: -38, z: -48, w: 22, d: 18, h: 28, r: 13,
+                group: webnoxGroup, mesh: venkyTower,
+                hp: 5000, maxHp: 5000, isHQ: true, destroyed: false, title: 'Webnox Technologies HQ'
+            });
 
             buildEnterableWebnoxOfficeInterior();
 
@@ -1852,7 +1865,17 @@
                     g.add(board);
                 }
                 scene.add(g);
-                buildingColliders.push({ x, z, r: Math.max(w, d) * 0.52 });
+                buildingColliders.push({
+                    x, z, w, d, h,
+                    r: Math.max(w, d) * 0.52,
+                    group: g,
+                    mesh,
+                    hp: 450,
+                    maxHp: 450,
+                    destroyed: false,
+                    respawnTimer: 0,
+                    title: title || 'Coimbatore Commercial Block'
+                });
             }
 
             // Coimbatore Major Landmarks & IT Towers
@@ -1945,7 +1968,48 @@
                 }
                 palm.position.set(tx, gy, tz);
                 scene.add(palm);
+                destructibleProps.push({
+                    mesh: palm, x: tx, z: tz, r: 1.1, knocked: false, vel: new THREE.Vector3(), rotVel: new THREE.Vector3(), timer: 0
+                });
             }
+
+            // Streetlights & Traffic Signal Poles (Destructible on Car Impact)
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.8, roughness: 0.3 });
+            const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+            for (let lx = -220; lx <= 240; lx += 38) {
+                [-10.5, 10.5].forEach(sideZ => {
+                    const lampGroup = new THREE.Group();
+                    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 6.8, 8), poleMat);
+                    pole.position.y = 3.4;
+                    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 1.8), poleMat);
+                    arm.position.set(0, 6.7, sideZ > 0 ? -0.8 : 0.8);
+                    const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 0.65), bulbMat);
+                    bulb.position.set(0, 6.6, sideZ > 0 ? -1.5 : 1.5);
+                    lampGroup.add(pole, arm, bulb);
+                    const gy = getGroundHeightAt(lx, sideZ);
+                    lampGroup.position.set(lx, gy, sideZ);
+                    scene.add(lampGroup);
+                    destructibleProps.push({
+                        mesh: lampGroup, x: lx, z: sideZ, r: 0.85, knocked: false, vel: new THREE.Vector3(), rotVel: new THREE.Vector3(), timer: 0
+                    });
+                });
+            }
+
+            // Stunt Jump Ramps across Coimbatore (Gandhipuram, Avinashi Rd, Ukkadam Lake)
+            const rampCoords = [
+                { x: -12, z: -18, rotY: 0, label: 'Cross Cut Stunt Jump' },
+                { x: 135, z: 22, rotY: Math.PI / 2, label: 'Peelamedu Flyover Launch' },
+                { x: -55, z: 225, rotY: Math.PI, label: 'Ukkadam Lake Mega Jump' }
+            ];
+            const stuntRampMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.4, metalness: 0.3 });
+            rampCoords.forEach(rc => {
+                const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(5.5, 1.4, 8.5), stuntRampMat);
+                rampMesh.position.set(rc.x, getGroundHeightAt(rc.x, rc.z) + 0.5, rc.z);
+                rampMesh.rotation.y = rc.rotY;
+                rampMesh.rotation.x = -0.26;
+                scene.add(rampMesh);
+                stuntRamps.push({ x: rc.x, z: rc.z, r: 4.5, label: rc.label });
+            });
 
             // Protagonist
             playerHuman = createRealisticHuman({
@@ -2026,6 +2090,8 @@
             const vObj = {
                 typeId, spec, mesh,
                 speed: 0,
+                velY: 0,
+                isAirborne: false,
                 fuel: 100,
                 gear: 1,
                 pitchTilt: 0,
@@ -2034,10 +2100,138 @@
                 isPolice: typeId === 'police',
                 aiSpeed: isAI ? 20 : 0,
                 health: typeId === 'tank' ? 2000 : 300,
-                maxHealth: typeId === 'tank' ? 2000 : 300
+                maxHealth: typeId === 'tank' ? 2000 : 300,
+                exploded: false,
+                respawnTimer: 0,
+                smokeTimer: 0
             };
             allVehicles.push(vObj);
             return vObj;
+        }
+
+        function showStuntCombo(title, cashBonus) {
+            state.cash += cashBonus;
+            const banner = document.getElementById('stunt-combo-banner');
+            if (!banner) return;
+            document.getElementById('stunt-combo-title').textContent = title;
+            document.getElementById('stunt-combo-val').textContent = `+₹${cashBonus.toLocaleString('en-IN')}`;
+            banner.classList.remove('hidden');
+            clearTimeout(banner.hideTimer);
+            banner.hideTimer = setTimeout(() => banner.classList.add('hidden'), 2400);
+        }
+
+        function spawnCollisionSparks(pos, count = 8, colorHex = 0xfacc15) {
+            for (let i = 0; i < count; i++) {
+                const s = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.24, 0.24, 0.24),
+                    new THREE.MeshBasicMaterial({ color: colorHex })
+                );
+                s.position.copy(pos).add(new THREE.Vector3(0, 0.8, 0));
+                scene.add(s);
+                activeParticles.push({
+                    mesh: s,
+                    vel: new THREE.Vector3((Math.random() - 0.5) * 18, 4 + Math.random() * 10, (Math.random() - 0.5) * 18),
+                    life: 0.45 + Math.random() * 0.25
+                });
+            }
+        }
+
+        function damageBuildingStructure(b, dmg, hitPoint) {
+            if (b.isHQ || b.destroyed) return;
+            b.hp -= dmg;
+            spawnCollisionSparks(hitPoint || new THREE.Vector3(b.x, 3, b.z), 6, 0x94a3b8);
+
+            if (b.hp <= 0) {
+                b.destroyed = true;
+                b.respawnTimer = 28; // Rebuilds automatically after 28s
+                cameraShakeIntensity = 1.3;
+                sfx.playExplosion();
+
+                // Spawn structural rubble chunks
+                for (let i = 0; i < 18; i++) {
+                    const chunk = new THREE.Mesh(
+                        new THREE.BoxGeometry(1.4 + Math.random() * 1.8, 1.2 + Math.random() * 1.5, 1.4 + Math.random() * 1.8),
+                        new THREE.MeshStandardMaterial({ color: i % 2 === 0 ? 0x334155 : 0x0f172a, roughness: 0.8 })
+                    );
+                    chunk.position.set(
+                        b.x + (Math.random() - 0.5) * b.w * 0.8,
+                        4 + Math.random() * (b.h * 0.7),
+                        b.z + (Math.random() - 0.5) * b.d * 0.8
+                    );
+                    scene.add(chunk);
+                    activeParticles.push({
+                        mesh: chunk,
+                        vel: new THREE.Vector3((Math.random() - 0.5) * 26, 8 + Math.random() * 16, (Math.random() - 0.5) * 26),
+                        life: 1.8
+                    });
+                }
+
+                showStuntCombo(`BUILDING DEMOLISHED: ${b.title}`, 50000);
+                escalateWantedLevel(2);
+            }
+        }
+
+        function damageVehicleEntity(v, dmg, impactPos) {
+            if (v.exploded) return;
+            v.health -= dmg;
+            if (impactPos) spawnCollisionSparks(impactPos, 6, 0xf97316);
+
+            if (v.health <= 0) {
+                v.exploded = true;
+                v.respawnTimer = 14;
+                v.speed = 0;
+                v.velY = 14;
+                cameraShakeIntensity = 1.5;
+                createExplosionAt(v.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
+
+                // Charred burnt metal look
+                v.mesh.traverse(child => {
+                    if (child.isMesh && child.material && child.material.color) {
+                        child.material = child.material.clone();
+                        child.material.color.setHex(0x18181b);
+                    }
+                });
+
+                if (player.inVehicle === v) {
+                    const ejectX = v.mesh.position.x - 3.4;
+                    const ejectZ = v.mesh.position.z;
+                    player.pos.set(ejectX, getGroundHeightAt(ejectX, ejectZ) + 1.5, ejectZ);
+                    player.velY = 9;
+                    player.isGrounded = false;
+                    player.inVehicle = null;
+                    playerHuman.visible = true;
+                    document.getElementById('vehicle-hud').classList.add('hidden');
+                    document.getElementById('btn-hijack-label').textContent = 'DRIVE / HIJACK [F]';
+                    damagePlayer(35);
+                }
+                showStuntCombo('VEHICLE WRECKED & EXPLODED!', 15000);
+            }
+        }
+
+        function resolveBuildingCollision(x, z, radius = 0.85) {
+            let rx = x;
+            let rz = z;
+            let hitBuilding = null;
+
+            for (const b of buildingColliders) {
+                if (b.destroyed) continue;
+                const halfW = (b.w ? b.w / 2 : b.r * 0.85) + radius;
+                const halfD = (b.d ? b.d / 2 : b.r * 0.85) + radius;
+                const dx = rx - b.x;
+                const dz = rz - b.z;
+
+                if (Math.abs(dx) < halfW && Math.abs(dz) < halfD) {
+                    hitBuilding = b;
+                    const overlapX = halfW - Math.abs(dx);
+                    const overlapZ = halfD - Math.abs(dz);
+                    if (overlapX < overlapZ) {
+                        rx += dx >= 0 ? overlapX : -overlapX;
+                    } else {
+                        rz += dz >= 0 ? overlapZ : -overlapZ;
+                    }
+                }
+            }
+            return { x: rx, z: rz, hitBuilding };
         }
 
         function buildEnterableWebnoxOfficeInterior() {
@@ -2333,8 +2527,15 @@
             allVehicles.forEach(v => {
                 const dist = v.mesh.position.distanceTo(pos);
                 if (dist < 12) {
-                    v.mesh.position.y += 2.2;
+                    v.velY = 10;
                     v.speed = -15;
+                    damageVehicleEntity(v, 220, v.mesh.position);
+                }
+            });
+
+            buildingColliders.forEach(b => {
+                if (!b.destroyed && Math.hypot(b.x - pos.x, b.z - pos.z) < b.r + 12) {
+                    damageBuildingStructure(b, 260, pos);
                 }
             });
         }
@@ -3183,13 +3384,107 @@
                 v.pitchTilt = THREE.MathUtils.lerp(v.pitchTilt || 0, -throttle * 0.045, 0.15);
                 v.rollTilt = THREE.MathUtils.lerp(v.rollTilt || 0, -steer * (Math.abs(v.speed) / maxSpd) * 0.085, 0.15);
 
-                const nx = v.mesh.position.x + Math.sin(player.rotY) * v.speed * dt;
-                const nz = v.mesh.position.z + Math.cos(player.rotY) * v.speed * dt;
-                const gy = getGroundHeightAt(nx, nz);
+                let nx = v.mesh.position.x + Math.sin(player.rotY) * v.speed * dt;
+                let nz = v.mesh.position.z + Math.cos(player.rotY) * v.speed * dt;
 
-                v.mesh.position.set(nx, gy, nz);
+                // 1. Check Stunt Jump Ramps
+                for (const sr of stuntRamps) {
+                    if (Math.hypot(nx - sr.x, nz - sr.z) < sr.r && Math.abs(v.speed) > 22 && !v.isAirborne) {
+                        v.velY = Math.min(28, Math.abs(v.speed) * 0.52);
+                        v.isAirborne = true;
+                        sfx.playCheatBeep();
+                        showStuntCombo(`INSANE STUNT JUMP: ${sr.label}!`, 25000);
+                    }
+                }
+
+                // 2. Check Vehicle vs Building Collision & Demolition
+                const bCol = resolveBuildingCollision(nx, nz, v.typeId === 'bus' || v.typeId === 'tank' ? 2.4 : 1.65);
+                if (bCol.hitBuilding) {
+                    const impactSpeed = Math.abs(v.speed);
+                    nx = bCol.x;
+                    nz = bCol.z;
+                    if (v.typeId === 'tank' && impactSpeed > 8) {
+                        damageBuildingStructure(bCol.hitBuilding, 500, v.mesh.position);
+                    } else if (impactSpeed > 16) {
+                        cameraShakeIntensity = Math.min(1.0, impactSpeed * 0.025);
+                        sfx.playExplosion();
+                        damageBuildingStructure(bCol.hitBuilding, impactSpeed * 3.2, v.mesh.position);
+                        if (!state.godMode) damageVehicleEntity(v, impactSpeed * 1.4, v.mesh.position);
+                        v.speed *= -0.42;
+                    } else {
+                        v.speed *= -0.25;
+                    }
+                }
+
+                // 3. Check Vehicle vs Vehicle Crash Physics
+                allVehicles.forEach(other => {
+                    if (other === v) return;
+                    const dist = Math.hypot(nx - other.mesh.position.x, nz - other.mesh.position.z);
+                    const minSep = (v.typeId === 'bus' || other.typeId === 'bus') ? 4.4 : 3.1;
+                    if (dist < minSep && dist > 0.01) {
+                        const pushX = (nx - other.mesh.position.x) / dist;
+                        const pushZ = (nz - other.mesh.position.z) / dist;
+                        const relSpeed = Math.abs(v.speed - (other.isAI ? other.aiSpeed : other.speed));
+
+                        nx += pushX * (minSep - dist) * 0.55;
+                        nz += pushZ * (minSep - dist) * 0.55;
+                        other.mesh.position.x -= pushX * (minSep - dist) * 0.85;
+                        other.mesh.position.z -= pushZ * (minSep - dist) * 0.85;
+
+                        if (relSpeed > 12) {
+                            cameraShakeIntensity = Math.min(0.9, relSpeed * 0.02);
+                            sfx.playExplosion();
+                            const crashDmg = v.typeId === 'tank' ? 400 : relSpeed * 2.4;
+                            damageVehicleEntity(other, crashDmg, other.mesh.position);
+                            if (v.typeId !== 'tank' && !state.godMode) {
+                                damageVehicleEntity(v, relSpeed * 0.85, v.mesh.position);
+                            }
+                            v.speed *= 0.45;
+                        }
+                    }
+                });
+
+                // 4. Check Vehicle vs Destructible Street Props (Poles & Trees)
+                destructibleProps.forEach(dp => {
+                    if (!dp.knocked && Math.hypot(nx - dp.x, nz - dp.z) < dp.r + 1.4 && Math.abs(v.speed) > 10) {
+                        dp.knocked = true;
+                        dp.timer = 18;
+                        const dirX = Math.sin(player.rotY);
+                        const dirZ = Math.cos(player.rotY);
+                        dp.vel.set(dirX * Math.abs(v.speed) * 0.7, 6 + Math.random() * 4, dirZ * Math.abs(v.speed) * 0.7);
+                        dp.rotVel.set((Math.random() - 0.5) * 6, 2, (Math.random() - 0.5) * 6);
+                        spawnCollisionSparks(dp.mesh.position, 5, 0xfef08a);
+                        showStuntCombo('STREET PROPERTY SMASHED!', 2500);
+                    }
+                });
+
+                // 5. Airborne Gravity & Landing
+                const gy = getGroundHeightAt(nx, nz);
+                if (v.isAirborne || v.mesh.position.y > gy + 0.05 || v.velY > 0) {
+                    v.velY -= 26 * dt;
+                    v.mesh.position.y += v.velY * dt;
+                    if (v.mesh.position.y <= gy) {
+                        v.mesh.position.y = gy;
+                        v.velY = 0;
+                        v.isAirborne = false;
+                        spawnCollisionSparks(v.mesh.position, 5, 0x38bdf8);
+                    }
+                } else {
+                    v.mesh.position.y = gy;
+                }
+
+                // 6. High-Speed Drift Combo Detection
+                if (keys.space && Math.abs(v.speed) > 22 && Math.abs(steer) > 0.3 && !v.isAirborne) {
+                    if (Math.random() < 0.25) {
+                        spawnCollisionSparks(v.mesh.position, 2, 0x94a3b8);
+                        showStuntCombo('KOVAI DRIFT KING COMBO!', 1500);
+                    }
+                }
+
+                v.mesh.position.x = nx;
+                v.mesh.position.z = nz;
                 v.mesh.rotation.y = player.rotY;
-                v.mesh.rotation.x = v.pitchTilt;
+                v.mesh.rotation.x = v.pitchTilt + (v.isAirborne ? v.velY * 0.015 : 0);
                 v.mesh.rotation.z = v.rollTilt;
                 player.pos.copy(v.mesh.position);
 
@@ -3221,6 +3516,10 @@
                 if (state.insideWebnoxInterior) {
                     nx = Math.max(-52, Math.min(-24, nx));
                     nz = Math.max(-59, Math.min(-37, nz));
+                } else if (player.pos.y < 14) {
+                    const footCol = resolveBuildingCollision(nx, nz, 0.75);
+                    nx = footCol.x;
+                    nz = footCol.z;
                 }
 
                 if (keys.space) {
@@ -3274,6 +3573,26 @@
                             break;
                         }
                     }
+                    if (!hit) {
+                        for (const v of allVehicles) {
+                            if (v !== player.inVehicle && !v.exploded && v.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0)).distanceTo(b.mesh.position) < 2.2) {
+                                if (b.isExplosive) createExplosionAt(b.mesh.position);
+                                else damageVehicleEntity(v, b.damage, b.mesh.position);
+                                hit = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!hit) {
+                        for (const bld of buildingColliders) {
+                            if (!bld.destroyed && Math.abs(b.mesh.position.x - bld.x) < (bld.w || 20) / 2 && Math.abs(b.mesh.position.z - bld.z) < (bld.d || 18) / 2 && b.mesh.position.y < (bld.h || 24)) {
+                                if (b.isExplosive) createExplosionAt(b.mesh.position);
+                                else damageBuildingStructure(bld, b.damage, b.mesh.position);
+                                hit = true;
+                                break;
+                            }
+                        }
+                    }
                 } else if (b.mesh.position.distanceTo(player.pos.clone().add(new THREE.Vector3(0, 1.1, 0))) < 1.3) {
                     damagePlayer(b.damage);
                     hit = true;
@@ -3307,22 +3626,99 @@
             }
 
             allVehicles.forEach(v => {
+                // Smoke particles for damaged / burning vehicles
+                if (v.health < (v.maxHealth || 300) * 0.48) {
+                    v.smokeTimer = (v.smokeTimer || 0) + dt;
+                    if (v.smokeTimer > 0.14) {
+                        v.smokeTimer = 0;
+                        const smoke = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.45, 6, 6),
+                            new THREE.MeshBasicMaterial({ color: v.exploded ? 0xef4444 : 0x475569, transparent: true, opacity: 0.7 })
+                        );
+                        smoke.position.copy(v.mesh.position).add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 1.4, (Math.random() - 0.5) * 0.8));
+                        scene.add(smoke);
+                        activeParticles.push({ mesh: smoke, vel: new THREE.Vector3(0, 6, 0), life: 0.65 });
+                    }
+                }
+
+                if (v.exploded) {
+                    v.respawnTimer -= dt;
+                    if (v.respawnTimer <= 0) {
+                        v.exploded = false;
+                        v.health = v.maxHealth || 300;
+                        v.mesh.traverse(child => {
+                            if (child.isMesh && child.material && child.material.color && child.geometry.type === 'BoxGeometry') {
+                                child.material.color.setHex(v.spec.color);
+                            }
+                        });
+                    }
+                    return;
+                }
+
                 if (v === player.inVehicle) return;
                 if (v.isPolice && state.wantedStars > 0) {
                     const dx = player.pos.x - v.mesh.position.x;
                     const dz = player.pos.z - v.mesh.position.z;
                     v.mesh.rotation.y = Math.atan2(dx, dz);
-                    v.mesh.position.x += Math.sin(v.mesh.rotation.y) * 24 * dt;
-                    v.mesh.position.z += Math.cos(v.mesh.rotation.y) * 24 * dt;
+                    const pnx = v.mesh.position.x + Math.sin(v.mesh.rotation.y) * 24 * dt;
+                    const pnz = v.mesh.position.z + Math.cos(v.mesh.rotation.y) * 24 * dt;
+                    const bCol = resolveBuildingCollision(pnx, pnz, 1.5);
+                    v.mesh.position.x = bCol.x;
+                    v.mesh.position.z = bCol.z;
                     v.mesh.position.y = getGroundHeightAt(v.mesh.position.x, v.mesh.position.z);
                 } else if (v.isAI) {
-                    v.mesh.position.x += Math.sin(v.mesh.rotation.y) * v.aiSpeed * dt;
-                    v.mesh.position.z += Math.cos(v.mesh.rotation.y) * v.aiSpeed * dt;
+                    // AI Brake sensor if player or another car is directly ahead
+                    const aheadX = v.mesh.position.x + Math.sin(v.mesh.rotation.y) * 7.5;
+                    const aheadZ = v.mesh.position.z + Math.cos(v.mesh.rotation.y) * 7.5;
+                    let blocked = Math.hypot(aheadX - player.pos.x, aheadZ - player.pos.z) < 5.5;
+                    if (!blocked) {
+                        v.mesh.position.x += Math.sin(v.mesh.rotation.y) * v.aiSpeed * dt;
+                        v.mesh.position.z += Math.cos(v.mesh.rotation.y) * v.aiSpeed * dt;
+                    }
                     v.mesh.position.y = getGroundHeightAt(v.mesh.position.x, v.mesh.position.z);
                     if (v.mesh.position.x > 340) v.mesh.position.x = -340;
                     if (v.mesh.position.x < -340) v.mesh.position.x = 340;
                     if (v.mesh.position.z > 280) v.mesh.position.z = -240;
                     if (v.mesh.position.z < -240) v.mesh.position.z = 280;
+                }
+            });
+
+            // Update Collapsing & Rebuilding Buildings
+            buildingColliders.forEach(b => {
+                if (b.destroyed) {
+                    if (b.group.position.y > -b.h - 4) {
+                        b.group.position.y -= 18 * dt;
+                        b.group.rotation.z += 0.12 * dt;
+                    }
+                    b.respawnTimer -= dt;
+                    if (b.respawnTimer <= 0) {
+                        b.destroyed = false;
+                        b.hp = b.maxHp;
+                        b.group.position.y = getGroundHeightAt(b.x, b.z);
+                        b.group.rotation.set(0, 0, 0);
+                    }
+                }
+            });
+
+            // Update Knocked-Down Streetlights & Palm Trees
+            destructibleProps.forEach(dp => {
+                if (dp.knocked) {
+                    dp.timer -= dt;
+                    dp.vel.y -= 24 * dt;
+                    dp.mesh.position.addScaledVector(dp.vel, dt);
+                    dp.mesh.rotation.x += dp.rotVel.x * dt;
+                    dp.mesh.rotation.z += dp.rotVel.z * dt;
+                    const gy = getGroundHeightAt(dp.mesh.position.x, dp.mesh.position.z);
+                    if (dp.mesh.position.y <= gy + 0.3) {
+                        dp.mesh.position.y = gy + 0.3;
+                        dp.vel.set(0, 0, 0);
+                        dp.rotVel.set(0, 0, 0);
+                    }
+                    if (dp.timer <= 0) {
+                        dp.knocked = false;
+                        dp.mesh.position.set(dp.x, getGroundHeightAt(dp.x, dp.z), dp.z);
+                        dp.mesh.rotation.set(0, 0, 0);
+                    }
                 }
             });
 
@@ -3465,6 +3861,12 @@
                     player.pos.z + Math.cos(player.rotY) * 18
                 );
                 camera.lookAt(lookTarget);
+            }
+
+            if (cameraShakeIntensity > 0.01) {
+                camera.position.x += (Math.random() - 0.5) * cameraShakeIntensity;
+                camera.position.y += (Math.random() - 0.5) * cameraShakeIntensity;
+                cameraShakeIntensity *= Math.pow(0.04, dt);
             }
 
             radarTimer += dt;
